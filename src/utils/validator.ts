@@ -64,7 +64,7 @@ export const validateWithZod = (schemaCode: string, responseData: any): Validati
       errors: [
         {
           path: [],
-          message: `Schema evaluation error: ${error.message}`,
+          message: `Schema evaluation error: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
     };
