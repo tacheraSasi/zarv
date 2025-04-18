@@ -13,9 +13,14 @@ interface ValidationResult {
  * Validates API response data against a Zod schema
  * @param schemaCode The Zod schema code as a string
  * @param responseData The API response data to validate
+ * @param zodVersion The version of Zod to use (currently only affects display)
  * @returns Validation result with success status and any errors
  */
-export const validateWithZod = (schemaCode: string, responseData: any): ValidationResult => {
+export const validateWithZod = (
+  schemaCode: string,
+  responseData: any,
+  zodVersion: string = '3.24.2'
+): ValidationResult => {
   try {
     // Create a secure compartment for evaluating the schema
     const compartment = new Compartment({

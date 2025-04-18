@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import Editor from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
 
 interface ValidationError {
   path: string[];
@@ -10,13 +12,15 @@ interface ResponseDisplayProps {
   response: any;
   isValid: boolean | null;
   errors: ValidationError[];
+  zodVersion?: string;
 }
 
 const ResponseDisplay: React.FC<ResponseDisplayProps> = ({
   loading,
   response,
   isValid,
-  errors
+  errors,
+  zodVersion = 'Latest'
 }) => {
   const formatJson = (json: any): string => {
     try {
@@ -24,6 +28,32 @@ const ResponseDisplay: React.FC<ResponseDisplayProps> = ({
     } catch (error) {
       return String(json);
     }
+  };
+
+  // Configure Monaco editor for JSON
+  const handleEditorBeforeMount = (monaco: typeof import('monaco-editor')) => {
+    // Define a custom theme for JSON
+    monaco.editor.defineTheme('jsonTheme', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'string', foreground: '#ce9178' },
+        { token: 'number', foreground: '#b5cea8' },
+        { token: 'delimiter', foreground: '#d4d4d4' },
+        { token: 'boolean', foreground: '#569cd6' },
+        { token: 'keyword', foreground: '#569cd6' },
+        { token: 'key', foreground: '#9cdcfe' },
+      ],
+      colors: {
+        'editor.background': '#1e1e1e',
+        'editor.foreground': '#d4d4d4',
+        'editorCursor.foreground': '#d4d4d4',
+        'editor.lineHighlightBackground': '#2d2d2d',
+        'editorLineNumber.foreground': '#858585',
+        'editor.selectionBackground': '#264f78',
+        'editor.inactiveSelectionBackground': '#3a3d41',
+      }
+    });
   };
 
   const renderValidationStatus = () => {
@@ -38,7 +68,7 @@ const ResponseDisplay: React.FC<ResponseDisplayProps> = ({
             </svg>
             <span className="font-medium">Validation Successful!</span>
           </div>
-          <p className="mt-1 text-sm">The API response matches the provided Zod schema.</p>
+          <p className="mt-1 text-sm">The API response matches the provided Zod schema (Version: {zodVersion}).</p>
         </div>
       );
     }
@@ -49,7 +79,7 @@ const ResponseDisplay: React.FC<ResponseDisplayProps> = ({
           <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
           </svg>
-          <span className="font-medium">Validation Failed</span>
+          <span className="font-medium">Validation Failed (Zod Version: {zodVersion})</span>
         </div>
         <div className="mt-2">
           <h4 className="text-sm font-medium mb-1">Validation Errors:</h4>

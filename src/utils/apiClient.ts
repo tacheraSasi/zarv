@@ -22,10 +22,12 @@ export const makeApiRequest = async (
       timeout: 10000, // 10 second timeout
     };
 
-    // Add request body for methods that support it
+    // Add a request body for methods that support it
     if (['post', 'put', 'patch'].includes(method.toLowerCase()) && data) {
       config.data = data;
     }
+
+    console.log("[config]", config)
 
     const response: AxiosResponse = await axios(config);
     return {
@@ -36,10 +38,7 @@ export const makeApiRequest = async (
     };
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      // Handle Axios errors
       if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
         return {
           error: true,
           status: error.response.status,

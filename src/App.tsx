@@ -6,8 +6,9 @@ import ResponseDisplay from './components/ResponseDisplay';
 import { makeApiRequest } from './utils/apiClient';
 import { validateWithZod } from './utils/validator';
 
-function App() {
+function AppContent() {
   const [schema, setSchema] = useState<string>('');
+  const [zodVersion, setZodVersion] = useState<string>('3.24.2'); // Default to latest version
   const [endpoint, setEndpoint] = useState<string>('');
   const [method, setMethod] = useState<string>('GET');
   const [headers, setHeaders] = useState<Record<string, string>>({});
@@ -19,6 +20,10 @@ function App() {
 
   const handleSchemaChange = (newSchema: string) => {
     setSchema(newSchema);
+  };
+
+  const handleZodVersionChange = (newVersion: string) => {
+    setZodVersion(newVersion);
   };
 
   const handleEndpointChange = (newEndpoint: string) => {
@@ -69,7 +74,7 @@ function App() {
 
       // Validate the response if schema is provided
       if (schema && apiResponse.data) {
-        const validationResult = validateWithZod(schema, apiResponse.data);
+        const validationResult = validateWithZod(schema, apiResponse.data, zodVersion);
         setIsValid(validationResult.isValid);
         setErrors(validationResult.errors);
       }
@@ -98,7 +103,10 @@ function App() {
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <SchemaInput onSchemaChange={handleSchemaChange} />
+                <SchemaInput
+                  onSchemaChange={handleSchemaChange}
+                  onZodVersionChange={handleZodVersionChange}
+                />
 
                 {['POST', 'PUT', 'PATCH'].includes(method) && (
                   <div className="mb-6">
@@ -143,15 +151,20 @@ function App() {
             response={response}
             isValid={isValid}
             errors={errors}
+            zodVersion={zodVersion}
           />
         </div>
 
         <footer className="mt-8 text-center text-sm text-gray-500">
-          <p>Zod API Response Validator (ZARV) - A tool for backend developers by <a  className={"text-blue-500"} href={"https://github.com/Bonny-kato"}>Kato Ui</a>  + <a className={"text-blue-500"} href={"https://www.jetbrains.com/junie/"}>Junie</a></p>
+          <p>Zod API Response Validator (ZARV) - A tool for backend developers by <a className="text-blue-500" href="https://github.com/Bonny-kato">Kato Ui</a> + <a className="text-blue-500" href="https://www.jetbrains.com/junie/">Junie</a></p>
         </footer>
       </div>
     </div>
   );
+}
+
+function App() {
+  return <AppContent />;
 }
 
 export default App;
