@@ -1,12 +1,20 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
-import App from './App.tsx'
+import { AuthProvider, ProtectedRoute } from './contexts/AuthContext'
+import HomePage from './pages/HomePage'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import ProjectsPage from './pages/ProjectsPage'
+import ProjectDetailPage from './pages/ProjectDetailPage'
+import SchemaFormPage from './pages/SchemaFormPage'
+import SchemaDetailPage from './pages/SchemaDetailPage'
 
 // Initialize theme based on localStorage or system preference
 const initializeTheme = () => {
   const savedTheme = localStorage.getItem('theme');
-  if (savedTheme === 'dark' || 
+  if (savedTheme === 'dark' ||
       (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
     document.documentElement.classList.add('dark');
   } else {
@@ -19,6 +27,55 @@ initializeTheme();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/projects"
+            element={
+              <ProtectedRoute>
+                <ProjectsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId"
+            element={
+              <ProtectedRoute>
+                <ProjectDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId/schemas/new"
+            element={
+              <ProtectedRoute>
+                <SchemaFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId/schemas/:schemaId/edit"
+            element={
+              <ProtectedRoute>
+                <SchemaFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId/schemas/:schemaId"
+            element={
+              <ProtectedRoute>
+                <SchemaDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   </StrictMode>,
 )

@@ -1,8 +1,12 @@
 import 'ses';
 import { z } from 'zod';
 
-// Initialize SES lockdown for secure evaluation
-lockdown({ errorTaming: 'unsafe' });
+// Initialize SES lockdown for secure evaluation with options for better Promise compatibility
+lockdown({
+  errorTaming: 'unsafe',
+  overrideTaming: 'severe', // Stricter override control
+  consoleTaming: 'unsafe'   // Allow full console access
+});
 
 interface ValidationResult {
   isValid: boolean;
