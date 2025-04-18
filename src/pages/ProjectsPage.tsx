@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
-import { Project, projectOperations } from '../utils/db';
+import { Project, projectOperations, projectUserOperations } from '../utils/db';
 
 const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [ownedProjectIds, setOwnedProjectIds] = useState<number[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
@@ -25,6 +26,18 @@ const ProjectsPage: React.FC = () => {
       try {
         const userProjects = await projectOperations.getByUserId(currentUser.id);
         setProjects(userProjects);
+
+        // Check which projects the user is the owner of
+        const ownedIds: number[] = [];
+        for (const project of userProjects) {
+          if (project.id) {
+            const isOwner = await projectUserOperations.isProjectOwner(project.id, currentUser.id);
+            if (isOwner) {
+              ownedIds.push(project.id);
+            }
+          }
+        }
+        setOwnedProjectIds(ownedIds);
       } catch (err) {
         console.error('Error loading projects:', err);
         setError('Failed to load projects');
@@ -60,6 +73,9 @@ const ProjectsPage: React.FC = () => {
       const updatedProjects = await projectOperations.getByUserId(currentUser.id);
       setProjects(updatedProjects);
 
+      // Add the new project to ownedProjectIds since the creator is always the owner
+      setOwnedProjectIds(prevIds => [...prevIds, projectId]);
+
       // Reset form
       setNewProjectName('');
       setNewProjectDescription('');
@@ -79,13 +95,21 @@ const ProjectsPage: React.FC = () => {
       return;
     }
 
+    if (!currentUser?.id) {
+      setError('You must be logged in to delete a project');
+      return;
+    }
+
     try {
-      await projectOperations.delete(projectId);
+      await projectOperations.delete(projectId, currentUser.id);
       // Remove the deleted project from the state
       setProjects(projects.filter(project => project.id !== projectId));
+
+      // Remove the project from ownedProjectIds
+      setOwnedProjectIds(prevIds => prevIds.filter(id => id !== projectId));
     } catch (err) {
       console.error('Error deleting project:', err);
-      setError('Failed to delete project');
+      setError('Failed to delete project: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -193,12 +217,14 @@ const ProjectsPage: React.FC = () => {
                   >
                     View Details
                   </Link>
-                  <button
-                    onClick={() => project.id && handleDeleteProject(project.id)}
-                    className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium"
-                  >
-                    Delete
-                  </button>
+                  {project.id && ownedProjectIds.includes(project.id) && (
+                    <button
+                      onClick={() => project.id && handleDeleteProject(project.id)}
+                      className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

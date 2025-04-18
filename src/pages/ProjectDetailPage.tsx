@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
-import { Project, Schema, projectOperations, schemaOperations } from '../utils/db';
+import { Project, Schema, ProjectUser, projectOperations, projectUserOperations, schemaOperations, userOperations } from '../utils/db';
 import { testSchemas, SchemaTestResult } from '../utils/schemaTestService';
 
 const ProjectDetailPage: React.FC = () => {
@@ -16,6 +16,11 @@ const ProjectDetailPage: React.FC = () => {
   const [editedDescription, setEditedDescription] = useState('');
   const [batchTestResults, setBatchTestResults] = useState<Array<{ schemaId?: number; schemaName: string; result: SchemaTestResult }> | null>(null);
   const [isTestingSchemas, setIsTestingSchemas] = useState(false);
+  const [projectUsers, setProjectUsers] = useState<Array<{ projectUser: ProjectUser; user: { id: number; name: string; email: string } }>>([]);
+  const [availableUsers, setAvailableUsers] = useState<Array<{ id: number; name: string; email: string }>>([]);
+  const [selectedUserId, setSelectedUserId] = useState<number | ''>('');
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [isUserOwner, setIsUserOwner] = useState(false);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -36,12 +41,17 @@ const ProjectDetailPage: React.FC = () => {
           return;
         }
 
-        // Verify that the project belongs to the current user
-        if (projectData.userId !== currentUser.id) {
+        // Check if the user has access to the project
+        const isInProject = await projectUserOperations.isUserInProject(parseInt(projectId), currentUser.id);
+        if (!isInProject) {
           setError('You do not have permission to view this project');
           setIsLoading(false);
           return;
         }
+
+        // Check if the user is the project owner
+        const isOwner = await projectUserOperations.isProjectOwner(parseInt(projectId), currentUser.id);
+        setIsUserOwner(isOwner);
 
         setProject(projectData);
         setEditedName(projectData.name);
@@ -50,6 +60,31 @@ const ProjectDetailPage: React.FC = () => {
         // Load schemas for this project
         const projectSchemas = await schemaOperations.getByProjectId(parseInt(projectId));
         setSchemas(projectSchemas);
+
+        // Load project users
+        const projectUsersList = await projectUserOperations.getProjectUsers(parseInt(projectId));
+
+        // Get user details for each project user
+        const projectUsersWithDetails = await Promise.all(
+          projectUsersList.map(async (pu) => {
+            const user = await userOperations.getById(pu.userId);
+            return {
+              projectUser: pu,
+              user: user ? { id: user.id!, name: user.name, email: user.email } : { id: pu.userId, name: 'Unknown', email: 'unknown' }
+            };
+          })
+        );
+        setProjectUsers(projectUsersWithDetails);
+
+        // If user is owner, load available users (users not already in the project)
+        if (isOwner) {
+          const allUsers = await userOperations.getAll();
+          const projectUserIds = projectUsersList.map(pu => pu.userId);
+          const availableUsersList = allUsers
+            .filter(user => !projectUserIds.includes(user.id!))
+            .map(user => ({ id: user.id!, name: user.name, email: user.email }));
+          setAvailableUsers(availableUsersList);
+        }
       } catch (err) {
         console.error('Error loading project:', err);
         setError('Failed to load project details');
@@ -64,8 +99,8 @@ const ProjectDetailPage: React.FC = () => {
   const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!project?.id) {
-      setError('Project not found');
+    if (!project?.id || !currentUser?.id) {
+      setError('Project not found or user not logged in');
       return;
     }
 
@@ -75,7 +110,7 @@ const ProjectDetailPage: React.FC = () => {
     }
 
     try {
-      await projectOperations.update(project.id, {
+      await projectOperations.update(project.id, currentUser.id, {
         name: editedName.trim(),
         description: editedDescription.trim() || undefined
       });
@@ -92,7 +127,102 @@ const ProjectDetailPage: React.FC = () => {
       setError('');
     } catch (err) {
       console.error('Error updating project:', err);
-      setError('Failed to update project');
+      setError('Failed to update project: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (!project?.id || !currentUser?.id || selectedUserId === '') {
+      setError('Invalid project, user, or selection');
+      return;
+    }
+
+    try {
+      // Check if current user is the owner
+      if (!isUserOwner) {
+        setError('Only the project owner can add users');
+        return;
+      }
+
+      // Add the user to the project
+      await projectUserOperations.addUserToProject(project.id, selectedUserId as number, 'member');
+
+      // Refresh project users
+      const projectUsersList = await projectUserOperations.getProjectUsers(project.id);
+      const projectUsersWithDetails = await Promise.all(
+        projectUsersList.map(async (pu) => {
+          const user = await userOperations.getById(pu.userId);
+          return {
+            projectUser: pu,
+            user: user ? { id: user.id!, name: user.name, email: user.email } : { id: pu.userId, name: 'Unknown', email: 'unknown' }
+          };
+        })
+      );
+      setProjectUsers(projectUsersWithDetails);
+
+      // Update available users
+      const allUsers = await userOperations.getAll();
+      const projectUserIds = projectUsersList.map(pu => pu.userId);
+      const availableUsersList = allUsers
+        .filter(user => !projectUserIds.includes(user.id!))
+        .map(user => ({ id: user.id!, name: user.name, email: user.email }));
+      setAvailableUsers(availableUsersList);
+
+      // Reset form
+      setSelectedUserId('');
+      setIsAddingUser(false);
+      setError('');
+    } catch (err) {
+      console.error('Error adding user to project:', err);
+      setError('Failed to add user: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleRemoveUser = async (userId: number) => {
+    if (!project?.id || !currentUser?.id) {
+      setError('Invalid project or user');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to remove this user from the project?')) {
+      return;
+    }
+
+    try {
+      // Check if current user is the owner
+      if (!isUserOwner) {
+        setError('Only the project owner can remove users');
+        return;
+      }
+
+      // Remove the user from the project
+      await projectUserOperations.removeUserFromProject(project.id, userId);
+
+      // Refresh project users
+      const projectUsersList = await projectUserOperations.getProjectUsers(project.id);
+      const projectUsersWithDetails = await Promise.all(
+        projectUsersList.map(async (pu) => {
+          const user = await userOperations.getById(pu.userId);
+          return {
+            projectUser: pu,
+            user: user ? { id: user.id!, name: user.name, email: user.email } : { id: pu.userId, name: 'Unknown', email: 'unknown' }
+          };
+        })
+      );
+      setProjectUsers(projectUsersWithDetails);
+
+      // Update available users
+      const allUsers = await userOperations.getAll();
+      const projectUserIds = projectUsersList.map(pu => pu.userId);
+      const availableUsersList = allUsers
+        .filter(user => !projectUserIds.includes(user.id!))
+        .map(user => ({ id: user.id!, name: user.name, email: user.email }));
+      setAvailableUsers(availableUsersList);
+
+      setError('');
+    } catch (err) {
+      console.error('Error removing user from project:', err);
+      setError('Failed to remove user: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -256,12 +386,14 @@ const ProjectDetailPage: React.FC = () => {
                         <p>Last updated: {formatDate(project.updatedAt)}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
-                    >
-                      Edit Project
-                    </button>
+                    {isUserOwner && (
+                      <button
+                        onClick={() => setIsEditing(true)}
+                        className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
+                      >
+                        Edit Project
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -269,6 +401,110 @@ const ProjectDetailPage: React.FC = () => {
           </div>
         )}
 
+        {/* Project Users Section */}
+        <div className="mb-8">
+          <div className="mb-6 flex justify-between items-center">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Project Members
+            </h2>
+            {isUserOwner && (
+              <button
+                onClick={() => setIsAddingUser(!isAddingUser)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                {isAddingUser ? 'Cancel' : 'Add User'}
+              </button>
+            )}
+          </div>
+
+          {isAddingUser && isUserOwner && (
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Add User to Project</h3>
+              <div className="flex space-x-4">
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : '')}
+                  className="flex-grow px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Select a user</option>
+                  {availableUsers.map(user => (
+                    <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAddUser}
+                  disabled={selectedUserId === ''}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </div>
+              {availableUsers.length === 0 && (
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  No more users available to add to this project.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Email
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Role
+                  </th>
+                  {isUserOwner && (
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {projectUsers.map((pu) => (
+                  <tr key={pu.projectUser.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                      {pu.user.name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {pu.user.email}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        pu.projectUser.role === 'owner' 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                      }`}>
+                        {pu.projectUser.role === 'owner' ? 'Owner' : 'Member'}
+                      </span>
+                    </td>
+                    {isUserOwner && (
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        {pu.projectUser.role !== 'owner' && (
+                          <button
+                            onClick={() => handleRemoveUser(pu.user.id)}
+                            className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Schemas Section */}
         <div className="mb-6 flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             Schemas

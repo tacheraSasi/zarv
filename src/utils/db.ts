@@ -15,11 +15,19 @@ export interface User {
 
 export interface Project {
   id?: number;
-  userId: number;
+  ownerId: number;  // The creator/owner of the project
   name: string;
   description?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface ProjectUser {
+  id?: number;
+  projectId: number;
+  userId: number;
+  role: 'owner' | 'member';  // Role of the user in the project
+  createdAt: Date;
 }
 
 export interface Schema {
@@ -35,12 +43,13 @@ export interface Schema {
 
 // Database name and version
 const DB_NAME = 'SchemaManagerDatabase';
-const DB_VERSION = 2;
+const DB_VERSION = 3; // Increased to handle the new PROJECT_USERS store and schema changes
 
 // Store names
 const STORES = {
   USERS: 'users',
   PROJECTS: 'projects',
+  PROJECT_USERS: 'projectUsers',
   SCHEMAS: 'schemas'
 };
 
@@ -79,8 +88,15 @@ const initDatabase = (): Promise<IDBDatabase> => {
 
       if (!db.objectStoreNames.contains(STORES.PROJECTS)) {
         const projectsStore = db.createObjectStore(STORES.PROJECTS, { keyPath: 'id', autoIncrement: true });
-        projectsStore.createIndex('userId', 'userId', { unique: false });
+        projectsStore.createIndex('ownerId', 'ownerId', { unique: false });
         projectsStore.createIndex('name', 'name', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.PROJECT_USERS)) {
+        const projectUsersStore = db.createObjectStore(STORES.PROJECT_USERS, { keyPath: 'id', autoIncrement: true });
+        projectUsersStore.createIndex('projectId', 'projectId', { unique: false });
+        projectUsersStore.createIndex('userId', 'userId', { unique: false });
+        projectUsersStore.createIndex('projectUser', ['projectId', 'userId'], { unique: true });
       }
 
       if (!db.objectStoreNames.contains(STORES.SCHEMAS)) {
@@ -371,13 +387,21 @@ export const userOperations = {
 
 // CRUD operations for Project
 export const projectOperations = {
+  /**
+   * Creates a new project with the given user as the owner
+   * @param userId ID of the user creating the project (will be set as owner)
+   * @param name Name of the project
+   * @param description Optional description of the project
+   * @returns Promise resolving to the new project's ID
+   */
   async create(userId: number, name: string, description?: string): Promise<number> {
     try {
       const now = new Date();
 
-      return await performTransaction<number>(STORES.PROJECTS, 'readwrite', (store) => {
+      // Create the project
+      const projectId = await performTransaction<number>(STORES.PROJECTS, 'readwrite', (store) => {
         const project: Project = {
-          userId,
+          ownerId: userId,
           name,
           description,
           createdAt: now,
@@ -385,12 +409,22 @@ export const projectOperations = {
         };
         return store.add(project);
       });
+
+      // Add the creator as the owner in the project_users table
+      await projectUserOperations.addUserToProject(projectId, userId, 'owner');
+
+      return projectId;
     } catch (error) {
       console.error('Error in create project:', error);
       throw new Error(`Database error while creating project: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
+  /**
+   * Retrieves a project by its ID
+   * @param id Project ID to retrieve
+   * @returns Promise resolving to the project if found, undefined otherwise
+   */
   async getById(id: number): Promise<Project | undefined> {
     try {
       return await performTransaction<Project | undefined>(STORES.PROJECTS, 'readonly', (store) => {
@@ -402,25 +436,66 @@ export const projectOperations = {
     }
   },
 
+  /**
+   * Gets all projects a user has access to (either as owner or member)
+   * @param userId ID of the user
+   * @returns Promise resolving to an array of projects
+   */
   async getByUserId(userId: number): Promise<Project[]> {
     try {
-      const projects = await performTransaction<Project[]>(STORES.PROJECTS, 'readonly', (store) => {
+      // Get all project IDs the user has access to
+      const projectIds = await projectUserOperations.getUserProjects(userId);
+
+      // Get all projects
+      const allProjects = await performTransaction<Project[]>(STORES.PROJECTS, 'readonly', (store) => {
         return store.getAll();
       });
 
-      return projects.filter(project => project.userId === userId);
+      // Filter projects by the IDs the user has access to
+      return allProjects.filter(project => projectIds.includes(project.id!));
     } catch (error) {
       console.error('Error in getByUserId project:', error);
       throw new Error(`Database error while retrieving projects by user ID: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
-  async update(id: number, data: Partial<Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>): Promise<void> {
+  /**
+   * Gets all projects owned by a user
+   * @param userId ID of the user
+   * @returns Promise resolving to an array of projects
+   */
+  async getOwnedByUserId(userId: number): Promise<Project[]> {
+    try {
+      const projects = await performTransaction<Project[]>(STORES.PROJECTS, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      return projects.filter(project => project.ownerId === userId);
+    } catch (error) {
+      console.error('Error in getOwnedByUserId project:', error);
+      throw new Error(`Database error while retrieving projects owned by user: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Updates a project with the given data
+   * @param id Project ID to update
+   * @param userId ID of the user performing the update
+   * @param data Partial project data to update
+   * @returns Promise resolving when the update is complete
+   * @throws Error if the user is not the project owner
+   */
+  async update(id: number, userId: number, data: Partial<Omit<Project, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>>): Promise<void> {
     try {
       // First get the project
       const project = await this.getById(id);
       if (!project) {
         throw new Error(`Project with ID ${id} not found`);
+      }
+
+      // Check if the user is the project owner
+      if (project.ownerId !== userId) {
+        throw new Error('Only the project owner can update the project');
       }
 
       // Update the project with new data
@@ -440,13 +515,41 @@ export const projectOperations = {
     }
   },
 
-  async delete(id: number): Promise<void> {
+  /**
+   * Deletes a project and all associated data
+   * @param id Project ID to delete
+   * @param userId ID of the user performing the deletion
+   * @returns Promise resolving when the deletion is complete
+   * @throws Error if the user is not the project owner
+   */
+  async delete(id: number, userId?: number): Promise<void> {
     try {
+      // First get the project
+      const project = await this.getById(id);
+      if (!project) {
+        throw new Error(`Project with ID ${id} not found`);
+      }
+
+      // If userId is provided, check if the user is the project owner
+      if (userId !== undefined && project.ownerId !== userId) {
+        throw new Error('Only the project owner can delete the project');
+      }
+
       // First delete all schemas associated with this project
       const schemas = await schemaOperations.getByProjectId(id);
       for (const schema of schemas) {
         if (schema.id) {
           await schemaOperations.delete(schema.id);
+        }
+      }
+
+      // Delete all project user records
+      const projectUsers = await projectUserOperations.getProjectUsers(id);
+      for (const projectUser of projectUsers) {
+        if (projectUser.id) {
+          await performTransaction<undefined>(STORES.PROJECT_USERS, 'readwrite', (store) => {
+            return store.delete(projectUser.id!);
+          });
         }
       }
 
@@ -457,6 +560,159 @@ export const projectOperations = {
     } catch (error) {
       console.error('Error in delete project:', error);
       throw new Error(`Database error while deleting project: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+};
+
+// CRUD operations for ProjectUser
+export const projectUserOperations = {
+  /**
+   * Adds a user to a project
+   * @param projectId ID of the project
+   * @param userId ID of the user to add
+   * @param role Role of the user in the project ('owner' or 'member')
+   * @returns Promise resolving to the new project user ID
+   */
+  async addUserToProject(projectId: number, userId: number, role: 'owner' | 'member'): Promise<number> {
+    try {
+      const now = new Date();
+
+      // Check if the user is already in the project
+      const existingProjectUser = await this.getProjectUser(projectId, userId);
+      if (existingProjectUser) {
+        throw new Error(`User is already a member of this project`);
+      }
+
+      return await performTransaction<number>(STORES.PROJECT_USERS, 'readwrite', (store) => {
+        const projectUser: ProjectUser = {
+          projectId,
+          userId,
+          role,
+          createdAt: now
+        };
+        return store.add(projectUser);
+      });
+    } catch (error) {
+      console.error('Error in addUserToProject:', error);
+      throw new Error(`Database error while adding user to project: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Removes a user from a project
+   * @param projectId ID of the project
+   * @param userId ID of the user to remove
+   * @returns Promise resolving when the removal is complete
+   */
+  async removeUserFromProject(projectId: number, userId: number): Promise<void> {
+    try {
+      // Get the project user record
+      const projectUser = await this.getProjectUser(projectId, userId);
+      if (!projectUser) {
+        throw new Error(`User is not a member of this project`);
+      }
+
+      // Don't allow removing the owner
+      if (projectUser.role === 'owner') {
+        throw new Error(`Cannot remove the project owner`);
+      }
+
+      // Remove the user from the project
+      await performTransaction<undefined>(STORES.PROJECT_USERS, 'readwrite', (store) => {
+        return store.delete(projectUser.id!);
+      });
+    } catch (error) {
+      console.error('Error in removeUserFromProject:', error);
+      throw new Error(`Database error while removing user from project: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets all users in a project
+   * @param projectId ID of the project
+   * @returns Promise resolving to an array of project users
+   */
+  async getProjectUsers(projectId: number): Promise<ProjectUser[]> {
+    try {
+      const projectUsers = await performTransaction<ProjectUser[]>(STORES.PROJECT_USERS, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      return projectUsers.filter(pu => pu.projectId === projectId);
+    } catch (error) {
+      console.error('Error in getProjectUsers:', error);
+      throw new Error(`Database error while getting project users: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets all projects a user is a member of
+   * @param userId ID of the user
+   * @returns Promise resolving to an array of project IDs
+   */
+  async getUserProjects(userId: number): Promise<number[]> {
+    try {
+      const projectUsers = await performTransaction<ProjectUser[]>(STORES.PROJECT_USERS, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      return projectUsers
+        .filter(pu => pu.userId === userId)
+        .map(pu => pu.projectId);
+    } catch (error) {
+      console.error('Error in getUserProjects:', error);
+      throw new Error(`Database error while getting user projects: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets a specific project user record
+   * @param projectId ID of the project
+   * @param userId ID of the user
+   * @returns Promise resolving to the project user record if found, undefined otherwise
+   */
+  async getProjectUser(projectId: number, userId: number): Promise<ProjectUser | undefined> {
+    try {
+      const projectUsers = await performTransaction<ProjectUser[]>(STORES.PROJECT_USERS, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      return projectUsers.find(pu => pu.projectId === projectId && pu.userId === userId);
+    } catch (error) {
+      console.error('Error in getProjectUser:', error);
+      throw new Error(`Database error while getting project user: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Checks if a user is a member of a project
+   * @param projectId ID of the project
+   * @param userId ID of the user
+   * @returns Promise resolving to true if the user is a member, false otherwise
+   */
+  async isUserInProject(projectId: number, userId: number): Promise<boolean> {
+    try {
+      const projectUser = await this.getProjectUser(projectId, userId);
+      return !!projectUser;
+    } catch (error) {
+      console.error('Error in isUserInProject:', error);
+      throw new Error(`Database error while checking if user is in project: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Checks if a user is the owner of a project
+   * @param projectId ID of the project
+   * @param userId ID of the user
+   * @returns Promise resolving to true if the user is the owner, false otherwise
+   */
+  async isProjectOwner(projectId: number, userId: number): Promise<boolean> {
+    try {
+      const projectUser = await this.getProjectUser(projectId, userId);
+      return !!projectUser && projectUser.role === 'owner';
+    } catch (error) {
+      console.error('Error in isProjectOwner:', error);
+      throw new Error(`Database error while checking if user is project owner: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 };

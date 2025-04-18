@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
-import { Project, Schema, projectOperations, schemaOperations } from '../utils/db';
+import { Project, Schema, projectOperations, projectUserOperations, schemaOperations } from '../utils/db';
 import SchemaEditor from '../components/SchemaEditor';
 import SchemaActions from '../components/SchemaActions';
 import SampleDataGenerator from '../components/SampleDataGenerator';
@@ -37,8 +37,9 @@ const SchemaDetailPage: React.FC = () => {
           return;
         }
 
-        // Verify that the project belongs to the current user
-        if (projectData.userId !== currentUser.id) {
+        // Verify that the user has access to the project
+        const hasAccess = await projectUserOperations.isUserInProject(parseInt(projectId), currentUser.id);
+        if (!hasAccess) {
           setError('You do not have permission to access this project');
           setIsLoading(false);
           return;
