@@ -57,6 +57,7 @@ const SchemaInput: React.FC<SchemaInputProps> = ({ onSchemaChange, onZodVersionC
   const [zodVersion, setZodVersion] = useState<string>(ZOD_VERSIONS[0].value);
   const [typeDefinitions, setTypeDefinitions] = useState<string>('');
   const [syntaxErrors, setSyntaxErrors] = useState<monaco.editor.IMarkerData[]>([]);
+  const [hasErrors, setHasErrors] = useState<boolean>(false);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof monaco | null>(null);
 
@@ -124,52 +125,164 @@ const SchemaInput: React.FC<SchemaInputProps> = ({ onSchemaChange, onZodVersionC
       // Simple syntax validation (check for balanced brackets, parentheses, etc.)
       const errors: monaco.editor.IMarkerData[] = [];
 
+      // Check for common Zod-specific issues
+      const zodIssues = checkZodSpecificIssues(schemaCode);
+      errors.push(...zodIssues);
+
       // Check for JavaScript syntax errors
-      try {
-        // Use Function constructor to check for syntax errors without executing the code
-        new Function(`return ${schemaCode}`);
-      } catch (error) {
-        if (error instanceof Error) {
-          // Parse the error message to get line and column information
-          const errorMessage = error.message;
-          const lineMatch = errorMessage.match(/line (\d+)/);
-          const columnMatch = errorMessage.match(/column (\d+)/);
+      if (errors.length === 0) {
+        try {
+          // Use Function constructor to check for syntax errors without executing the code
+          new Function(`return ${schemaCode}`);
+        } catch (error) {
+          if (error instanceof Error) {
+            // Parse the error message to get line and column information
+            const errorMessage = error.message;
+            const lineMatch = errorMessage.match(/line (\d+)/);
+            const columnMatch = errorMessage.match(/column (\d+)/);
 
-          const line = lineMatch ? parseInt(lineMatch[1], 10) : 1;
-          const column = columnMatch ? parseInt(columnMatch[1], 10) : 1;
+            const line = lineMatch ? parseInt(lineMatch[1], 10) : 1;
+            const column = columnMatch ? parseInt(columnMatch[1], 10) : 1;
 
-          errors.push({
-            severity: monaco.MarkerSeverity.Error,
-            message: `Syntax error: ${errorMessage}`,
-            startLineNumber: line,
-            startColumn: column,
-            endLineNumber: line,
-            endColumn: column + 1
-          });
-        } else {
-          // Generic error without position information
-          errors.push({
-            severity: monaco.MarkerSeverity.Error,
-            message: `Syntax error in schema`,
-            startLineNumber: 1,
-            startColumn: 1,
-            endLineNumber: 1,
-            endColumn: 2
-          });
+            errors.push({
+              severity: monaco.MarkerSeverity.Error,
+              message: `Syntax error: ${errorMessage}`,
+              startLineNumber: line,
+              startColumn: column,
+              endLineNumber: line,
+              endColumn: column + 1
+            });
+          } else {
+            // Generic error without position information
+            errors.push({
+              severity: monaco.MarkerSeverity.Error,
+              message: `Syntax error in schema`,
+              startLineNumber: 1,
+              startColumn: 1,
+              endLineNumber: 1,
+              endColumn: 2
+            });
+          }
         }
       }
 
       // Set markers for the errors
       monaco.editor.setModelMarkers(model, 'zod', errors);
       setSyntaxErrors(errors);
+      setHasErrors(errors.length > 0);
     } catch (error) {
       console.error('Error validating schema:', error);
     }
   };
 
+  // Check for common Zod-specific issues
+  const checkZodSpecificIssues = (schemaCode: string): monaco.editor.IMarkerData[] => {
+    if (!monacoRef.current) return [];
+
+    const monaco = monacoRef.current;
+    const errors: monaco.editor.IMarkerData[] = [];
+    const lines = schemaCode.split('\n');
+
+    // Check for missing 'z' prefix - only match standalone method calls, not ones that are part of a property
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Check for method calls without 'z' prefix - exclude when they're part of an object property
+      const methodWithoutZRegex = /(?<!\w[:.])\b(string|number|boolean|array|object|enum|literal|union|intersection|tuple|record|map|set|date|null|undefined|any|unknown|void|never)\(\)/g;
+      let match;
+
+      while ((match = methodWithoutZRegex.exec(line)) !== null) {
+        errors.push({
+          severity: monaco.MarkerSeverity.Error,
+          message: `Missing 'z' prefix: Use 'z.${match[1]}()' instead of '${match[0]}'`,
+          startLineNumber: i + 1,
+          startColumn: match.index + 1,
+          endLineNumber: i + 1,
+          endColumn: match.index + match[0].length + 1
+        });
+      }
+    }
+
+    // Check for unbalanced brackets and parentheses across the entire schema
+    const openBrackets = (schemaCode.match(/\{/g) || []).length;
+    const closeBrackets = (schemaCode.match(/\}/g) || []).length;
+    const openParens = (schemaCode.match(/\(/g) || []).length;
+    const closeParens = (schemaCode.match(/\)/g) || []).length;
+    const openSquare = (schemaCode.match(/\[/g) || []).length;
+    const closeSquare = (schemaCode.match(/\]/g) || []).length;
+
+    // Only report unbalanced brackets if there's an actual imbalance
+    if (openBrackets > closeBrackets) {
+      // Find the last line with an opening bracket
+      let lastOpenBracketLine = 0;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i].includes('{')) {
+          lastOpenBracketLine = i;
+          break;
+        }
+      }
+
+      errors.push({
+        severity: monaco.MarkerSeverity.Warning,
+        message: `Missing closing curly bracket '}'`,
+        startLineNumber: lastOpenBracketLine + 1,
+        startColumn: lines[lastOpenBracketLine].lastIndexOf('{') + 2,
+        endLineNumber: lastOpenBracketLine + 1,
+        endColumn: lines[lastOpenBracketLine].lastIndexOf('{') + 3
+      });
+    }
+
+    if (openParens > closeParens) {
+      // Find the last line with an opening parenthesis
+      let lastOpenParenLine = 0;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i].includes('(')) {
+          lastOpenParenLine = i;
+          break;
+        }
+      }
+
+      errors.push({
+        severity: monaco.MarkerSeverity.Warning,
+        message: `Missing closing parenthesis ')'`,
+        startLineNumber: lastOpenParenLine + 1,
+        startColumn: lines[lastOpenParenLine].lastIndexOf('(') + 2,
+        endLineNumber: lastOpenParenLine + 1,
+        endColumn: lines[lastOpenParenLine].lastIndexOf('(') + 3
+      });
+    }
+
+    if (openSquare > closeSquare) {
+      // Find the last line with an opening square bracket
+      let lastOpenSquareLine = 0;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i].includes('[')) {
+          lastOpenSquareLine = i;
+          break;
+        }
+      }
+
+      errors.push({
+        severity: monaco.MarkerSeverity.Warning,
+        message: `Missing closing square bracket ']'`,
+        startLineNumber: lastOpenSquareLine + 1,
+        startColumn: lines[lastOpenSquareLine].lastIndexOf('[') + 2,
+        endLineNumber: lastOpenSquareLine + 1,
+        endColumn: lines[lastOpenSquareLine].lastIndexOf('[') + 3
+      });
+    }
+
+    return errors;
+  };
+
   const handleSelectSample = (sampleSchema: string) => {
     setSchema(sampleSchema);
     onSchemaChange(sampleSchema);
+
+    // Validate the selected sample schema
+    setTimeout(() => {
+      validateSchema(sampleSchema);
+    }, 0);
   };
 
   const handleVersionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -177,6 +290,13 @@ const SchemaInput: React.FC<SchemaInputProps> = ({ onSchemaChange, onZodVersionC
     setZodVersion(newVersion);
     if (onZodVersionChange) {
       onZodVersionChange(newVersion);
+    }
+
+    // Re-validate the schema with the new Zod version
+    if (schema) {
+      setTimeout(() => {
+        validateSchema(schema);
+      }, 0);
     }
   };
 
@@ -335,8 +455,58 @@ const SchemaInput: React.FC<SchemaInputProps> = ({ onSchemaChange, onZodVersionC
             wordWrap: 'on',
             suggestOnTriggerCharacters: true,
           }}
+          onMount={(editor) => {
+            editorRef.current = editor;
+            // Validate initial schema if any
+            if (schema) {
+              validateSchema(schema);
+            }
+          }}
         />
       </div>
+      {hasErrors && (
+        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400 dark:text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-400">Syntax errors detected in your schema</h3>
+              <div className="mt-2 text-sm text-red-700 dark:text-red-300">
+                <ul className="list-disc pl-5 space-y-1">
+                  {syntaxErrors.slice(0, 3).map((error, index) => (
+                    <li key={index}>
+                      <button
+                        className="text-left hover:underline focus:outline-none focus:ring-1 focus:ring-red-500 rounded"
+                        onClick={() => {
+                          if (editorRef.current) {
+                            editorRef.current.revealLineInCenter(error.startLineNumber);
+                            editorRef.current.setPosition({
+                              lineNumber: error.startLineNumber,
+                              column: error.startColumn
+                            });
+                            editorRef.current.focus();
+                          }
+                        }}
+                      >
+                        <span className="font-medium">Line {error.startLineNumber}:</span> {error.message}
+                      </button>
+                    </li>
+                  ))}
+                  {syntaxErrors.length > 3 && (
+                    <li>And {syntaxErrors.length - 3} more error(s)...</li>
+                  )}
+                </ul>
+              </div>
+              <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+                Fix these errors to ensure your schema works correctly.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <p className="mt-2 text-sm text-gray-500">
         Write your Zod schema to validate API responses against, or select a sample schema above.
         Use auto-completion for Zod methods by typing 'z.' or pressing Ctrl+Space.

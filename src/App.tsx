@@ -3,6 +3,7 @@ import SchemaInput from './components/SchemaInput';
 import ApiEndpointInput from './components/ApiEndpointInput';
 import AuthorizationInput from './components/AuthorizationInput';
 import ResponseDisplay from './components/ResponseDisplay';
+import ThemeToggle from './components/ThemeToggle';
 import { makeApiRequest } from './utils/apiClient';
 import { validateWithZod } from './utils/validator';
 
@@ -90,16 +91,19 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen dark:hidden bg-gray-50 dark:bg-gray-900">
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <header className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-gray-900">Zod API Response Validator</h1>
-          <p className="mt-2 text-gray-600">
+        <header className="mb-8 text-center relative">
+          <div className="absolute right-0 top-0">
+            <ThemeToggle />
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Zod API Response Validator</h1>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
             Validate API responses against Zod schemas
           </p>
         </header>
 
-        <div className="bg-white shadow rounded-lg p-6">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -110,14 +114,14 @@ function AppContent() {
 
                 {['POST', 'PUT', 'PATCH'].includes(method) && (
                   <div className="mb-6">
-                    <label htmlFor="requestBody" className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="requestBody" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Request Body (JSON)
                     </label>
                     <textarea
                       id="requestBody"
                       name="requestBody"
                       rows={5}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
                       placeholder={'{ "key": "value" }'}
                       value={requestBody}
                       onChange={handleRequestBodyChange}
@@ -136,7 +140,7 @@ function AppContent() {
                 <div className="mt-6">
                   <button
                     type="submit"
-                    className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:ring-offset-gray-800"
                     disabled={loading}
                   >
                     {loading ? 'Validating...' : 'Validate API Response'}
@@ -155,8 +159,8 @@ function AppContent() {
           />
         </div>
 
-        <footer className="mt-8 text-center text-sm text-gray-500">
-          <p>Zod API Response Validator (ZARV) - A tool for backend developers by <a className="text-blue-500" href="https://github.com/Bonny-kato">Kato Ui</a> + <a className="text-blue-500" href="https://www.jetbrains.com/junie/">Junie</a></p>
+        <footer className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
+          <p>Zod API Response Validator (ZARV) - A tool for backend developers by <a className="text-blue-500 dark:text-blue-400" href="https://github.com/Bonny-kato">Kato Ui</a> + <a className="text-blue-500 dark:text-blue-400" href="https://www.jetbrains.com/junie/">Junie</a></p>
         </footer>
       </div>
     </div>
