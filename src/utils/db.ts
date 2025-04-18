@@ -4,6 +4,10 @@ import CryptoJS from 'crypto-js';
 export interface User {
   id?: number;
   email: string;
+  name: string;
+  position: 'frontend' | 'backend';
+  numberOfProjects: number;
+  isAdmin: boolean;
   passwordHash: string;
   createdAt: Date;
   updatedAt: Date;
@@ -31,7 +35,7 @@ export interface Schema {
 
 // Database name and version
 const DB_NAME = 'SchemaManagerDatabase';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Store names
 const STORES = {
@@ -136,12 +140,21 @@ export const decryptData = (encryptedData: string): string => {
 // CRUD operations for User
 export const userOperations = {
   /**
-   * Creates a new user with the given email and password
+   * Creates a new user with the given details
    * @param email User's email address
    * @param password User's password
+   * @param name User's name
+   * @param position User's position (frontend or backend)
+   * @param isAdmin Whether the user is an admin
    * @returns Promise resolving to the new user's ID
    */
-  async create(email: string, password: string): Promise<number> {
+  async create(
+    email: string,
+    password: string,
+    name: string,
+    position: 'frontend' | 'backend',
+    isAdmin: boolean = false
+  ): Promise<number> {
     try {
       // Convert email to lowercase for consistency
       const lowerEmail = email.toLowerCase();
@@ -151,6 +164,10 @@ export const userOperations = {
       return await performTransaction<number>(STORES.USERS, 'readwrite', (store) => {
         const user: User = {
           email: lowerEmail,
+          name,
+          position,
+          numberOfProjects: 0,
+          isAdmin,
           passwordHash,
           createdAt: now,
           updatedAt: now
@@ -160,6 +177,51 @@ export const userOperations = {
     } catch (error) {
       console.error('Error in create user:', error);
       throw new Error(`Database error while creating user: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Creates a new user by admin invitation
+   * @param email User's email address
+   * @param name User's name
+   * @param position User's position (frontend or backend)
+   * @param password User's initial password
+   * @returns Promise resolving to the new user's ID
+   */
+  async createByAdmin(
+    email: string,
+    name: string,
+    position: 'frontend' | 'backend',
+    password: string
+  ): Promise<number> {
+    return this.create(email, password, name, position, false);
+  },
+
+  /**
+   * Seeds the admin user if it doesn't exist
+   * @returns Promise resolving to the admin user's ID or undefined if admin already exists
+   */
+  async seedAdmin(): Promise<number | undefined> {
+    try {
+      // Check if admin already exists
+      const adminEmail = 'admin@gmail.com';
+      const existingAdmin = await this.getByEmail(adminEmail);
+
+      if (existingAdmin) {
+        return undefined; // Admin already exists
+      }
+
+      // Create admin user
+      return await this.create(
+        adminEmail,
+        'admin123',
+        'Administrator',
+        'backend',
+        true
+      );
+    } catch (error) {
+      console.error('Error in seedAdmin:', error);
+      throw new Error(`Database error while seeding admin: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
@@ -211,6 +273,109 @@ export const userOperations = {
     } catch (error) {
       console.error('Authentication error:', error);
       throw new Error(`Authentication error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Retrieves all users from the database
+   * @returns Promise resolving to an array of all users
+   */
+  async getAll(): Promise<User[]> {
+    try {
+      return await performTransaction<User[]>(STORES.USERS, 'readonly', (store) => {
+        return store.getAll();
+      });
+    } catch (error) {
+      console.error('Error in getAll users:', error);
+      throw new Error(`Database error while retrieving all users: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Retrieves a user by their ID
+   * @param id User ID to search for
+   * @returns Promise resolving to the user if found, undefined otherwise
+   */
+  async getById(id: number): Promise<User | undefined> {
+    try {
+      return await performTransaction<User | undefined>(STORES.USERS, 'readonly', (store) => {
+        return store.get(id);
+      });
+    } catch (error) {
+      console.error('Error in getById user:', error);
+      throw new Error(`Database error while retrieving user by ID: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Updates a user with the given data
+   * @param id User ID to update
+   * @param data Partial user data to update
+   * @returns Promise resolving when the update is complete
+   */
+  async update(id: number, data: Partial<Omit<User, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> {
+    try {
+      await performTransaction<IDBValidKey>(STORES.USERS, 'readwrite', async (store) => {
+        // Get the existing user
+        const request = store.get(id);
+
+        return new Promise((resolve, reject) => {
+          request.onsuccess = () => {
+            const user = request.result;
+            if (!user) {
+              reject(new Error(`User with ID ${id} not found`));
+              return;
+            }
+
+            // Update the user with new data
+            const updatedUser = {
+              ...user,
+              ...data,
+              updatedAt: new Date()
+            };
+
+            // Put the updated user back in the store
+            const updateRequest = store.put(updatedUser);
+            updateRequest.onsuccess = () => resolve(updateRequest.result);
+            updateRequest.onerror = () => reject(updateRequest.error);
+          };
+
+          request.onerror = () => reject(request.error);
+        });
+      });
+    } catch (error) {
+      console.error('Error in update user:', error);
+      throw new Error(`Database error while updating user: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Deletes a user by their ID
+   * @param id User ID to delete
+   * @param currentUserId ID of the current user performing the deletion
+   * @returns Promise resolving when the deletion is complete
+   * @throws Error if attempting to delete the current user
+   */
+  async delete(id: number, currentUserId: number): Promise<void> {
+    try {
+      // Prevent users from deleting themselves
+      if (id === currentUserId) {
+        throw new Error('Users cannot delete their own accounts');
+      }
+
+      // Check if user exists
+      const user = await this.getById(id);
+      if (!user) {
+        throw new Error(`User with ID ${id} not found`);
+      }
+
+      // Delete the user
+      await performTransaction<undefined>(STORES.USERS, 'readwrite', (store) => {
+        return store.delete(id);
+      });
+    } catch (error) {
+      console.error('Error in delete user:', error);
+      throw new Error(`Database error while deleting user: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 };

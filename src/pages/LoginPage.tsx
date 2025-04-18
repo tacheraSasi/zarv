@@ -86,10 +86,7 @@ const LoginPage: React.FC = () => {
         </form>
 
         <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-indigo-600 dark:text-indigo-400 hover:underline">
-            Register here
-          </Link>
+          Contact an administrator to get an account
         </p>
       </div>
     </Layout>

@@ -8,7 +8,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, isAdmin, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -28,6 +28,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 >
                   Projects
                 </Link>
+                {isAuthenticated && isAdmin && (
+                  <Link
+                    to="/users"
+                    className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    Users
+                  </Link>
+                )}
               </nav>
             </div>
             <div className="flex items-center space-x-4">
@@ -40,20 +48,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   Logout
                 </button>
               ) : (
-                <div className="flex space-x-2">
-                  <Link
-                    to="/login"
-                    className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700"
-                  >
-                    Register
-                  </Link>
-                </div>
+                <Link
+                  to="/login"
+                  className="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700"
+                >
+                  Login
+                </Link>
               )}
             </div>
           </div>

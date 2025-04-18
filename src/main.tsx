@@ -5,11 +5,11 @@ import './index.css'
 import { AuthProvider, ProtectedRoute } from './contexts/AuthContext'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import SchemaFormPage from './pages/SchemaFormPage'
 import SchemaDetailPage from './pages/SchemaDetailPage'
+import UserManagementPage from './pages/UserManagementPage'
 
 // Initialize theme based on localStorage or system preference
 const initializeTheme = () => {
@@ -32,12 +32,19 @@ createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
           <Route
             path="/projects"
             element={
               <ProtectedRoute>
                 <ProjectsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute>
+                <UserManagementPage />
               </ProtectedRoute>
             }
           />
