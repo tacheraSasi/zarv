@@ -103,7 +103,7 @@ const SchemaFormPage: React.FC = () => {
     }
 
     try {
-      if ( schemaId) {
+      if (isEditMode && schemaId) {
         // Update existing schema
          await schemaOperations.update(parseInt(schemaId), {
           name: name.trim(),
@@ -237,7 +237,7 @@ const SchemaFormPage: React.FC = () => {
                 type="submit"
                 className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
-                {schemaId ? 'Update Schema' : 'Create Schema'}
+                {isEditMode ? 'Update Schema' : 'Create Schema'}
               </button>
             </div>
           </form>

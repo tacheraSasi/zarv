@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Project, Schema, projectOperations, schemaOperations } from '../utils/db';
 import SchemaEditor from '../components/SchemaEditor';
 import SchemaActions from '../components/SchemaActions';
+import SampleDataGenerator from '../components/SampleDataGenerator';
 import { testSchema, SchemaTestResult } from '../utils/schemaTestService';
 
 const SchemaDetailPage: React.FC = () => {
@@ -252,32 +253,43 @@ const SchemaDetailPage: React.FC = () => {
                   </div>
                 )}
 
-                <div className="mb-4">
-                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Schema Definition
-                  </h3>
-                  <SchemaEditor
-                    value={schema.schemaDefinition}
-                    readOnly={true}
-                    height="350px"
-                  />
-                  <SchemaActions
-                    schemaDefinition={schema.schemaDefinition}
-                    schemaName={schema.name}
-                    onDuplicate={handleDuplicateSchema}
-                    onRunSchema={schema.endpointUrl ? handleTestSchema : undefined}
-                    readOnly={true}
-                  />
-                  {!schema.endpointUrl && (
-                    <p className="mt-2 text-sm text-yellow-600 dark:text-yellow-400">
-                      Add an endpoint URL to enable schema testing
-                    </p>
-                  )}
-                  {isTestingSchema && (
-                    <p className="mt-2 text-sm text-blue-600 dark:text-blue-400">
-                      Testing schema...
-                    </p>
-                  )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Schema Definition
+                    </h3>
+                    <SchemaEditor
+                      value={schema.schemaDefinition}
+                      readOnly={true}
+                      height="350px"
+                    />
+                    <div className="mt-2">
+                      <SchemaActions
+                        schemaDefinition={schema.schemaDefinition}
+                        schemaName={schema.name}
+                        onDuplicate={handleDuplicateSchema}
+                        onRunSchema={schema.endpointUrl ? handleTestSchema : undefined}
+                        readOnly={true}
+                      />
+                      {!schema.endpointUrl && (
+                        <p className="mt-2 text-sm text-yellow-600 dark:text-yellow-400">
+                          Add an endpoint URL to enable schema testing
+                        </p>
+                      )}
+                      {isTestingSchema && (
+                        <p className="mt-2 text-sm text-blue-600 dark:text-blue-400">
+                          Testing schema...
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <SampleDataGenerator
+                      schemaDefinition={schema.schemaDefinition}
+                      schemaName={schema.name}
+                      autoGenerate={true}
+                    />
+                  </div>
                 </div>
 
                 {testResult && (
