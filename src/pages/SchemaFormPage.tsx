@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { Project, Schema, projectOperations, schemaOperations } from '../utils/db';
@@ -8,6 +8,7 @@ import SchemaActions from '../components/SchemaActions';
 
 const SchemaFormPage: React.FC = () => {
   const { projectId, schemaId } = useParams<{ projectId: string; schemaId: string }>();
+  const location = useLocation();
   const [project, setProject] = useState<Project | null>(null);
   const [schema, setSchema] = useState<Schema | null>(null);
   const [name, setName] = useState('');
@@ -19,7 +20,8 @@ const SchemaFormPage: React.FC = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
-  const isEditMode = schemaId !== 'new';
+  // Check if we're in edit mode by looking at the URL path
+  const isEditMode = location.pathname.includes('/edit');
 
   // Load project and schema (if editing) on component mount
   useEffect(() => {
@@ -101,27 +103,27 @@ const SchemaFormPage: React.FC = () => {
     }
 
     try {
-      if (isEditMode && schema?.id) {
+      if ( schemaId) {
         // Update existing schema
-        await schemaOperations.update(schema.id, {
+         await schemaOperations.update(parseInt(schemaId), {
           name: name.trim(),
           description: description.trim() || undefined,
           endpointUrl: endpointUrl.trim() || undefined,
           schemaDefinition: schemaDefinition.trim()
         });
+        navigate(`/projects/${projectId}/schemas/${schemaId}`);
       } else {
         // Create new schema
-        await schemaOperations.create(
+        const newSchemaId = await schemaOperations.create(
           parseInt(projectId),
           name.trim(),
           schemaDefinition.trim(),
           description.trim() || undefined,
           endpointUrl.trim() || undefined
         );
+        navigate(`/projects/${projectId}/schemas/${newSchemaId}`);
       }
 
-      // Navigate back to project details
-      navigate(`/projects/${projectId}`);
     } catch (err) {
       console.error('Error saving schema:', err);
       setError('Failed to save schema');
@@ -235,7 +237,7 @@ const SchemaFormPage: React.FC = () => {
                 type="submit"
                 className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
-                {isEditMode ? 'Update Schema' : 'Create Schema'}
+                {schemaId ? 'Update Schema' : 'Create Schema'}
               </button>
             </div>
           </form>

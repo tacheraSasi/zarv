@@ -16,8 +16,6 @@
     "autoprefixer": "^10.4.21",
     "axios": "^1.8.4",
     "crypto-js": "^4.2.0",
-    "dexie": "^3.2.4",
-    "dexie-react-hooks": "^1.1.7",
     "monaco-editor": "^0.52.2",
     "postcss": "^8.5.3",
     "react": "^19.0.0",
@@ -29,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
+    "@types/crypto-js": "^4.2.2",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",

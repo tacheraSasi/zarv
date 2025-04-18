@@ -18,7 +18,7 @@ const LoginPage: React.FC = () => {
 
     try {
       // Use Promise.resolve to ensure we're working with a proper Promise
-      const result = await Promise.resolve(login(email, password));
+      const result = await login(email, password)
       if (result && result.success) {
         navigate('/projects');
       } else {

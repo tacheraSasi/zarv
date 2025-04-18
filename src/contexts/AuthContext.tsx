@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, userOperations, safePromise } from '../utils/db';
+import { User, userOperations } from '../utils/db';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -28,8 +28,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const sessionData = localStorage.getItem('auth_session');
         if (sessionData) {
           const { email } = JSON.parse(sessionData);
-          // Use safePromise to ensure proper Promise handling
-          const user = await safePromise(userOperations.getByEmail(email));
+          // Directly await the promise
+          const user = await userOperations.getByEmail(email);
           if (user) {
             setCurrentUser(user);
           } else {
@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     };
 
-    checkSession();
+    checkSession().then();
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
@@ -61,8 +61,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       try {
-        // Authenticate user with safePromise to ensure proper Promise handling
-        const user = await safePromise(userOperations.authenticate(email, password));
+        // Directly await the promise
+        const user = await userOperations.authenticate(email, password);
         if (!user) {
           return { success: false, error: 'Invalid email or password' };
         }
@@ -94,21 +94,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { success: false, error: 'Please enter a valid email address' };
       }
 
-      // Check if user already exists with safePromise to ensure proper Promise handling
-      const existingUser = await safePromise(userOperations.getByEmail(email));
+      // Check if user already exists
+      const existingUser = await userOperations.getByEmail(email);
       if (existingUser) {
         return { success: false, error: 'Email already in use' };
       }
 
       try {
-        // Create new user with safePromise to ensure proper Promise handling
-        const userId = await safePromise(userOperations.create(email, password));
+        // Create new user
+        const userId = await userOperations.create(email, password);
         if (!userId) {
           return { success: false, error: 'Failed to create user account' };
         }
 
-        // Get the newly created user with safePromise to ensure proper Promise handling
-        const user = await safePromise(userOperations.getByEmail(email));
+        // Get the newly created user
+        const user = await userOperations.getByEmail(email);
         if (!user) {
           return { success: false, error: 'User created but could not be retrieved' };
         }

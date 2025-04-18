@@ -1,4 +1,3 @@
-import Dexie, { Table } from 'dexie';
 import CryptoJS from 'crypto-js';
 
 // Define interfaces for our data models
@@ -30,81 +29,97 @@ export interface Schema {
   updatedAt: Date;
 }
 
-// Define the database class
-class SchemaManagerDatabase extends Dexie {
-  users!: Table<User, number>;
-  projects!: Table<Project, number>;
-  schemas!: Table<Schema, number>;
+// Database name and version
+const DB_NAME = 'SchemaManagerDatabase';
+const DB_VERSION = 1;
 
-  constructor() {
-    super('SchemaManagerDatabase');
-    this.version(1).stores({
-      users: '++id, email',
-      projects: '++id, userId, name',
-      schemas: '++id, projectId, name'
-    });
+// Store names
+const STORES = {
+  USERS: 'users',
+  PROJECTS: 'projects',
+  SCHEMAS: 'schemas'
+};
+
+// Database connection
+let dbConnection: IDBDatabase | null = null;
+let dbInitPromise: Promise<IDBDatabase> | null = null;
+
+// Initialize the database
+const initDatabase = (): Promise<IDBDatabase> => {
+  if (dbInitPromise) {
+    return dbInitPromise;
   }
-}
 
-// Create a database instance with error handling
-export const db = new SchemaManagerDatabase();
+  dbInitPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-// Add error event listeners to the database
-db.on('ready', () => {
-  console.log('Database is ready');
-});
+    request.onerror = (event) => {
+      console.error('Failed to open database:', request.error);
+      reject(request.error);
+    };
 
-db.on('error', (error) => {
-  console.error('Database error:', error);
-});
+    request.onsuccess = (event) => {
+      dbConnection = request.result;
+      console.log('Database is ready');
+      resolve(dbConnection);
+    };
 
-// Ensure database is open before use
-db.open().catch(error => {
-  console.error('Failed to open database:', error);
-});
+    request.onupgradeneeded = (event) => {
+      const db = request.result;
 
-// Add hooks for consistent error handling and Promise management
-db.use({
-  stack: 'dbcore',
-  name: 'PromiseErrorHandler',
-  create(downlevelDatabase) {
-    return {
-      ...downlevelDatabase,
-      table(tableName) {
-        const downlevelTable = downlevelDatabase.table(tableName);
-        return {
-          ...downlevelTable,
-          mutate: async req => {
-            try {
-              return await downlevelTable.mutate(req);
-            } catch (error) {
-              console.error(`Error in table ${tableName} operation:`, error);
-              throw error; // Rethrow to be handled by caller
-            }
-          },
-          get: async primaryKey => {
-            try {
-              return await downlevelTable.get(primaryKey);
-            } catch (error) {
-              console.error(`Error getting record from ${tableName}:`, error);
-              throw error; // Rethrow to be handled by caller
-            }
-          }
-        };
+      // Create object stores if they don't exist
+      if (!db.objectStoreNames.contains(STORES.USERS)) {
+        const usersStore = db.createObjectStore(STORES.USERS, { keyPath: 'id', autoIncrement: true });
+        usersStore.createIndex('email', 'email', { unique: true });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.PROJECTS)) {
+        const projectsStore = db.createObjectStore(STORES.PROJECTS, { keyPath: 'id', autoIncrement: true });
+        projectsStore.createIndex('userId', 'userId', { unique: false });
+        projectsStore.createIndex('name', 'name', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.SCHEMAS)) {
+        const schemasStore = db.createObjectStore(STORES.SCHEMAS, { keyPath: 'id', autoIncrement: true });
+        schemasStore.createIndex('projectId', 'projectId', { unique: false });
+        schemasStore.createIndex('name', 'name', { unique: false });
       }
     };
-  }
-});
+  });
 
-// Utility function for safe Promise handling
-export const safePromise = async <T>(promise: Promise<T>): Promise<T> => {
-  try {
-    return await Promise.resolve(promise);
-  } catch (error) {
-    console.error('Promise error:', error);
-    throw error;
-  }
+  return dbInitPromise;
 };
+
+// Get database connection
+const getDB = async (): Promise<IDBDatabase> => {
+  if (dbConnection) {
+    return dbConnection;
+  }
+  return await initDatabase();
+};
+
+// Generic function to perform a transaction
+const performTransaction = async <T>(
+  storeName: string,
+  mode: IDBTransactionMode,
+  callback: (store: IDBObjectStore) => IDBRequest<T>
+): Promise<T> => {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, mode);
+    const store = transaction.objectStore(storeName);
+
+    const request = callback(store);
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// Initialize the database
+initDatabase().catch(error => {
+  console.error('Failed to initialize database:', error);
+});
 
 // Encryption utilities
 const SECRET_KEY = 'schema-manager-secret-key'; // In a real app, this should be stored securely
@@ -120,33 +135,50 @@ export const decryptData = (encryptedData: string): string => {
 
 // CRUD operations for User
 export const userOperations = {
+  /**
+   * Creates a new user with the given email and password
+   * @param email User's email address
+   * @param password User's password
+   * @returns Promise resolving to the new user's ID
+   */
   async create(email: string, password: string): Promise<number> {
     try {
       // Convert email to lowercase for consistency
       const lowerEmail = email.toLowerCase();
       const passwordHash = CryptoJS.SHA256(password).toString();
       const now = new Date();
-      // Use safePromise to ensure proper Promise handling
-      const userId = await safePromise(db.users.add({
-        email: lowerEmail,
-        passwordHash,
-        createdAt: now,
-        updatedAt: now
-      }));
-      return userId;
+
+      return await performTransaction<number>(STORES.USERS, 'readwrite', (store) => {
+        const user: User = {
+          email: lowerEmail,
+          passwordHash,
+          createdAt: now,
+          updatedAt: now
+        };
+        return store.add(user);
+      });
     } catch (error) {
       console.error('Error in create user:', error);
       throw new Error(`Database error while creating user: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
+  /**
+   * Retrieves a user by their email address
+   * @param email Email address to search for
+   * @returns Promise resolving to the user if found, undefined otherwise
+   */
   async getByEmail(email: string): Promise<User | undefined> {
     try {
       // Convert email to lowercase for case-insensitive comparison
       const lowerEmail = email.toLowerCase();
-      // Get all users and find the one with matching email (case-insensitive)
-      // Use safePromise to ensure proper Promise handling
-      const users = await safePromise(db.users.toArray());
+
+      // Get all users from the store
+      const users = await performTransaction<User[]>(STORES.USERS, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      // Find the user with matching email (case-insensitive)
       return users.find(user => user.email.toLowerCase() === lowerEmail);
     } catch (error) {
       console.error('Error in getByEmail:', error);
@@ -154,36 +186,31 @@ export const userOperations = {
     }
   },
 
+  /**
+   * Authenticates a user with email and password
+   * @param email User's email address
+   * @param password User's password
+   * @returns Promise resolving to the authenticated user or null if authentication fails
+   */
   async authenticate(email: string, password: string): Promise<User | null> {
     try {
       // Get user with case-insensitive email comparison
-      let user;
-      try {
-        // Use safePromise to ensure proper Promise handling
-        user = await safePromise(this.getByEmail(email));
-      } catch (err) {
-        console.error('Error getting user by email:', err);
-        throw new Error('Database error while retrieving user');
-      }
+      const user = await this.getByEmail(email);
 
       if (!user) {
-        console.log('User not found with email:', email);
         return null;
       }
 
-      // Compare password hashes
+      // Verify password
       const passwordHash = CryptoJS.SHA256(password).toString();
-      const isPasswordValid = user.passwordHash === passwordHash;
-
-      if (!isPasswordValid) {
-        console.log('Invalid password for user:', email);
+      if (user.passwordHash !== passwordHash) {
         return null;
       }
 
       return user;
     } catch (error) {
       console.error('Authentication error:', error);
-      throw error; // Rethrow the error to be handled by the caller
+      throw new Error(`Authentication error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 };
@@ -191,33 +218,103 @@ export const userOperations = {
 // CRUD operations for Project
 export const projectOperations = {
   async create(userId: number, name: string, description?: string): Promise<number> {
-    const now = new Date();
-    return await db.projects.add({
-      userId,
-      name,
-      description,
-      createdAt: now,
-      updatedAt: now
-    });
+    try {
+      const now = new Date();
+
+      return await performTransaction<number>(STORES.PROJECTS, 'readwrite', (store) => {
+        const project: Project = {
+          userId,
+          name,
+          description,
+          createdAt: now,
+          updatedAt: now
+        };
+        return store.add(project);
+      });
+    } catch (error) {
+      console.error('Error in create project:', error);
+      throw new Error(`Database error while creating project: ${error instanceof Error ? error.message : String(error)}`);
+    }
   },
 
   async getById(id: number): Promise<Project | undefined> {
-    return await db.projects.get(id);
+    try {
+      return await performTransaction<Project | undefined>(STORES.PROJECTS, 'readonly', (store) => {
+        return store.get(id);
+      });
+    } catch (error) {
+      console.error('Error in getById project:', error);
+      throw new Error(`Database error while retrieving project: ${error instanceof Error ? error.message : String(error)}`);
+    }
   },
 
   async getByUserId(userId: number): Promise<Project[]> {
-    return await db.projects.where('userId').equals(userId).toArray();
+    try {
+      const projects = await performTransaction<Project[]>(STORES.PROJECTS, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      return projects.filter(project => project.userId === userId);
+    } catch (error) {
+      console.error('Error in getByUserId project:', error);
+      throw new Error(`Database error while retrieving projects by user ID: ${error instanceof Error ? error.message : String(error)}`);
+    }
   },
 
   async update(id: number, data: Partial<Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>): Promise<void> {
-    await db.projects.update(id, { ...data, updatedAt: new Date() });
+    try {
+      await performTransaction<IDBValidKey>(STORES.PROJECTS, 'readwrite', async (store) => {
+        // Get the existing project
+        const request = store.get(id);
+
+        return new Promise((resolve, reject) => {
+          request.onsuccess = () => {
+            const project = request.result;
+            if (!project) {
+              reject(new Error(`Project with ID ${id} not found`));
+              return;
+            }
+
+            // Update the project with new data
+            const updatedProject = {
+              ...project,
+              ...data,
+              updatedAt: new Date()
+            };
+
+            // Put the updated project back in the store
+            const updateRequest = store.put(updatedProject);
+            updateRequest.onsuccess = () => resolve(updateRequest.result);
+            updateRequest.onerror = () => reject(updateRequest.error);
+          };
+
+          request.onerror = () => reject(request.error);
+        });
+      });
+    } catch (error) {
+      console.error('Error in update project:', error);
+      throw new Error(`Database error while updating project: ${error instanceof Error ? error.message : String(error)}`);
+    }
   },
 
   async delete(id: number): Promise<void> {
-    // First delete all schemas associated with this project
-    await db.schemas.where('projectId').equals(id).delete();
-    // Then delete the project
-    await db.projects.delete(id);
+    try {
+      // First delete all schemas associated with this project
+      const schemas = await schemaOperations.getByProjectId(id);
+      for (const schema of schemas) {
+        if (schema.id) {
+          await schemaOperations.delete(schema.id);
+        }
+      }
+
+      // Then delete the project
+      await performTransaction<undefined>(STORES.PROJECTS, 'readwrite', (store) => {
+        return store.delete(id);
+      });
+    } catch (error) {
+      console.error('Error in delete project:', error);
+      throw new Error(`Database error while deleting project: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 };
 
@@ -230,53 +327,117 @@ export const schemaOperations = {
     description?: string,
     endpointUrl?: string
   ): Promise<number> {
-    const now = new Date();
-    return await db.schemas.add({
-      projectId,
-      name,
-      description,
-      endpointUrl,
-      schemaDefinition: encryptData(schemaDefinition), // Encrypt schema definition
-      createdAt: now,
-      updatedAt: now
-    });
+    try {
+      const now = new Date();
+
+      return await performTransaction<number>(STORES.SCHEMAS, 'readwrite', (store) => {
+        const schema: Schema = {
+          projectId,
+          name,
+          description,
+          endpointUrl,
+          schemaDefinition: encryptData(schemaDefinition), // Encrypt schema definition
+          createdAt: now,
+          updatedAt: now
+        };
+        return store.add(schema);
+      });
+    } catch (error) {
+      console.error('Error in create schema:', error);
+      throw new Error(`Database error while creating schema: ${error instanceof Error ? error.message : String(error)}`);
+    }
   },
 
   async getById(id: number): Promise<Schema | undefined> {
-    const schema = await db.schemas.get(id);
-    if (schema) {
-      // Decrypt schema definition
-      schema.schemaDefinition = decryptData(schema.schemaDefinition);
+    try {
+      const schema = await performTransaction<Schema | undefined>(STORES.SCHEMAS, 'readonly', (store) => {
+        return store.get(id);
+      });
+
+      if (schema) {
+        // Decrypt schema definition
+        schema.schemaDefinition = decryptData(schema.schemaDefinition);
+      }
+
+      return schema;
+    } catch (error) {
+      console.error('Error in getById schema:', error);
+      throw new Error(`Database error while retrieving schema: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return schema;
   },
 
   async getByProjectId(projectId: number): Promise<Schema[]> {
-    const schemas = await db.schemas.where('projectId').equals(projectId).toArray();
-    // Decrypt schema definitions
-    return schemas.map(schema => ({
-      ...schema,
-      schemaDefinition: decryptData(schema.schemaDefinition)
-    }));
+    try {
+      const schemas = await performTransaction<Schema[]>(STORES.SCHEMAS, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      // Filter schemas by projectId and decrypt schema definitions
+      return schemas
+        .filter(schema => schema.projectId === projectId)
+        .map(schema => ({
+          ...schema,
+          schemaDefinition: decryptData(schema.schemaDefinition)
+        }));
+    } catch (error) {
+      console.error('Error in getByProjectId schema:', error);
+      throw new Error(`Database error while retrieving schemas by project ID: ${error instanceof Error ? error.message : String(error)}`);
+    }
   },
 
   async update(
     id: number,
     data: Partial<Omit<Schema, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>>
   ): Promise<void> {
-    const updateData = { ...data, updatedAt: new Date() };
+    try {
+      await performTransaction<IDBValidKey>(STORES.SCHEMAS, 'readwrite', async (store) => {
+        // Get the existing schema
+        const request = store.get(id);
 
-    // Encrypt schema definition if it's being updated
-    if (updateData.schemaDefinition) {
-      updateData.schemaDefinition = encryptData(updateData.schemaDefinition);
+        return new Promise((resolve, reject) => {
+          request.onsuccess = () => {
+            const schema = request.result;
+            if (!schema) {
+              reject(new Error(`Schema with ID ${id} not found`));
+              return;
+            }
+
+            // Create update data with encrypted schema definition if provided
+            const updateData = { ...data };
+            if (updateData.schemaDefinition) {
+              updateData.schemaDefinition = encryptData(updateData.schemaDefinition);
+            }
+
+            // Update the schema with new data
+            const updatedSchema = {
+              ...schema,
+              ...updateData,
+              updatedAt: new Date()
+            };
+
+            // Put the updated schema back in the store
+            const updateRequest = store.put(updatedSchema);
+            updateRequest.onsuccess = () => resolve(updateRequest.result);
+            updateRequest.onerror = () => reject(updateRequest.error);
+          };
+
+          request.onerror = () => reject(request.error);
+        });
+      });
+    } catch (error) {
+      console.error('Error in update schema:', error);
+      throw new Error(`Database error while updating schema: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    await db.schemas.update(id, updateData);
   },
 
   async delete(id: number): Promise<void> {
-    await db.schemas.delete(id);
+    try {
+      await performTransaction<undefined>(STORES.SCHEMAS, 'readwrite', (store) => {
+        return store.delete(id);
+      });
+    } catch (error) {
+      console.error('Error in delete schema:', error);
+      throw new Error(`Database error while deleting schema: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 };
-
-export default db;

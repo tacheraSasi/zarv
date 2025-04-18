@@ -32,7 +32,7 @@ const RegisterPage: React.FC = () => {
 
     try {
       // Use Promise.resolve to ensure we're working with a proper Promise
-      const result = await Promise.resolve(register(email, password));
+      const result = await register(email, password);
       if (result && result.success) {
         navigate('/projects');
       } else {
