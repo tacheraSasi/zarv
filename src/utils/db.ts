@@ -315,33 +315,22 @@ export const userOperations = {
    */
   async update(id: number, data: Partial<Omit<User, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> {
     try {
-      await performTransaction<IDBValidKey>(STORES.USERS, 'readwrite', async (store) => {
-        // Get the existing user
-        const request = store.get(id);
+      // First get the user
+      const user = await this.getById(id);
+      if (!user) {
+        throw new Error(`User with ID ${id} not found`);
+      }
 
-        return new Promise((resolve, reject) => {
-          request.onsuccess = () => {
-            const user = request.result;
-            if (!user) {
-              reject(new Error(`User with ID ${id} not found`));
-              return;
-            }
+      // Update the user with new data
+      const updatedUser = {
+        ...user,
+        ...data,
+        updatedAt: new Date()
+      };
 
-            // Update the user with new data
-            const updatedUser = {
-              ...user,
-              ...data,
-              updatedAt: new Date()
-            };
-
-            // Put the updated user back in the store
-            const updateRequest = store.put(updatedUser);
-            updateRequest.onsuccess = () => resolve(updateRequest.result);
-            updateRequest.onerror = () => reject(updateRequest.error);
-          };
-
-          request.onerror = () => reject(request.error);
-        });
+      // Put the updated user back in the store
+      await performTransaction<IDBValidKey>(STORES.USERS, 'readwrite', (store) => {
+        return store.put(updatedUser);
       });
     } catch (error) {
       console.error('Error in update user:', error);
@@ -428,33 +417,22 @@ export const projectOperations = {
 
   async update(id: number, data: Partial<Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>): Promise<void> {
     try {
-      await performTransaction<IDBValidKey>(STORES.PROJECTS, 'readwrite', async (store) => {
-        // Get the existing project
-        const request = store.get(id);
+      // First get the project
+      const project = await this.getById(id);
+      if (!project) {
+        throw new Error(`Project with ID ${id} not found`);
+      }
 
-        return new Promise((resolve, reject) => {
-          request.onsuccess = () => {
-            const project = request.result;
-            if (!project) {
-              reject(new Error(`Project with ID ${id} not found`));
-              return;
-            }
+      // Update the project with new data
+      const updatedProject = {
+        ...project,
+        ...data,
+        updatedAt: new Date()
+      };
 
-            // Update the project with new data
-            const updatedProject = {
-              ...project,
-              ...data,
-              updatedAt: new Date()
-            };
-
-            // Put the updated project back in the store
-            const updateRequest = store.put(updatedProject);
-            updateRequest.onsuccess = () => resolve(updateRequest.result);
-            updateRequest.onerror = () => reject(updateRequest.error);
-          };
-
-          request.onerror = () => reject(request.error);
-        });
+      // Put the updated project back in the store
+      await performTransaction<IDBValidKey>(STORES.PROJECTS, 'readwrite', (store) => {
+        return store.put(updatedProject);
       });
     } catch (error) {
       console.error('Error in update project:', error);
@@ -555,39 +533,30 @@ export const schemaOperations = {
     data: Partial<Omit<Schema, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>>
   ): Promise<void> {
     try {
-      await performTransaction<IDBValidKey>(STORES.SCHEMAS, 'readwrite', async (store) => {
-        // Get the existing schema
-        const request = store.get(id);
+      // First get the schema
+      const schema = await this.getById(id);
+      if (!schema) {
+        throw new Error(`Schema with ID ${id} not found`);
+      }
 
-        return new Promise((resolve, reject) => {
-          request.onsuccess = () => {
-            const schema = request.result;
-            if (!schema) {
-              reject(new Error(`Schema with ID ${id} not found`));
-              return;
-            }
+      // Create update data with encrypted schema definition if provided
+      const updateData = { ...data };
+      if (updateData.schemaDefinition) {
+        updateData.schemaDefinition = encryptData(updateData.schemaDefinition);
+      }
 
-            // Create update data with encrypted schema definition if provided
-            const updateData = { ...data };
-            if (updateData.schemaDefinition) {
-              updateData.schemaDefinition = encryptData(updateData.schemaDefinition);
-            }
+      // Update the schema with new data
+      const updatedSchema = {
+        ...schema,
+        ...updateData,
+        // Re-encrypt the schema definition since getById decrypts it
+        schemaDefinition: updateData.schemaDefinition || encryptData(schema.schemaDefinition),
+        updatedAt: new Date()
+      };
 
-            // Update the schema with new data
-            const updatedSchema = {
-              ...schema,
-              ...updateData,
-              updatedAt: new Date()
-            };
-
-            // Put the updated schema back in the store
-            const updateRequest = store.put(updatedSchema);
-            updateRequest.onsuccess = () => resolve(updateRequest.result);
-            updateRequest.onerror = () => reject(updateRequest.error);
-          };
-
-          request.onerror = () => reject(request.error);
-        });
+      // Put the updated schema back in the store
+      await performTransaction<IDBValidKey>(STORES.SCHEMAS, 'readwrite', (store) => {
+        return store.put(updatedSchema);
       });
     } catch (error) {
       console.error('Error in update schema:', error);

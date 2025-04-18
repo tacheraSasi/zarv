@@ -346,7 +346,7 @@ const UserManagementPage: React.FC = () => {
 
       {/* Edit User Modal */}
       {editingUser && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-gray-600/60  flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Edit User</h2>
 
@@ -424,7 +424,7 @@ const UserManagementPage: React.FC = () => {
 
       {/* Delete User Confirmation */}
       {deletingUser && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-gray-600/60  flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Confirm Deletion</h2>
 
