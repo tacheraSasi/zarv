@@ -33,6 +33,7 @@ export interface ProjectUser {
 export interface Schema {
   id?: number;
   projectId: number;
+  creatorId: number;  // ID of the user who created the schema
   name: string;
   description?: string;
   endpointUrl?: string;
@@ -41,21 +42,73 @@ export interface Schema {
   updatedAt: Date;
 }
 
+export interface SchemaVersion {
+  id?: number;
+  schemaId: number;
+  userId: number;  // ID of the user who made the change
+  timestamp: Date;
+  schemaDefinition: string;  // Snapshot of the schema at this point in time
+  name: string;  // Schema name at this point in time
+  description?: string;  // Schema description at this point in time
+  endpointUrl?: string;  // Schema endpoint URL at this point in time
+  changeDescription?: string;  // Description of what was changed
+}
+
 // Database name and version
 const DB_NAME = 'SchemaManagerDatabase';
-const DB_VERSION = 3; // Increased to handle the new PROJECT_USERS store and schema changes
+const DB_VERSION = 4; // Increased to handle schema creator tracking and version history
 
 // Store names
 const STORES = {
   USERS: 'users',
   PROJECTS: 'projects',
   PROJECT_USERS: 'projectUsers',
-  SCHEMAS: 'schemas'
+  SCHEMAS: 'schemas',
+  SCHEMA_VERSIONS: 'schemaVersions'
 };
 
 // Database connection
 let dbConnection: IDBDatabase | null = null;
 let dbInitPromise: Promise<IDBDatabase> | null = null;
+
+// Function to reset the database (delete everything except admin user)
+export const resetDatabase = async (): Promise<void> => {
+  // Close any existing connection
+  if (dbConnection) {
+    dbConnection.close();
+    dbConnection = null;
+  }
+
+  // Reset the init promise
+  dbInitPromise = null;
+
+  // Delete the database
+  return new Promise((resolve, reject) => {
+    const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
+
+    deleteRequest.onerror = () => {
+      console.error('Failed to delete database:', deleteRequest.error);
+      reject(deleteRequest.error);
+    };
+
+    deleteRequest.onsuccess = () => {
+      console.log('Database deleted successfully');
+
+      // Reinitialize the database
+      initDatabase()
+        .then(async () => {
+          // Seed the admin user
+          await userOperations.seedAdmin();
+          console.log('Database reset complete. Admin user seeded.');
+          resolve();
+        })
+        .catch(error => {
+          console.error('Failed to reinitialize database:', error);
+          reject(error);
+        });
+    };
+  });
+};
 
 // Initialize the database
 const initDatabase = (): Promise<IDBDatabase> => {
@@ -79,6 +132,8 @@ const initDatabase = (): Promise<IDBDatabase> => {
 
     request.onupgradeneeded = (event) => {
       const db = request.result;
+      const oldVersion = event.oldVersion;
+      const transaction = request.transaction;
 
       // Create object stores if they don't exist
       if (!db.objectStoreNames.contains(STORES.USERS)) {
@@ -103,6 +158,21 @@ const initDatabase = (): Promise<IDBDatabase> => {
         const schemasStore = db.createObjectStore(STORES.SCHEMAS, { keyPath: 'id', autoIncrement: true });
         schemasStore.createIndex('projectId', 'projectId', { unique: false });
         schemasStore.createIndex('name', 'name', { unique: false });
+        schemasStore.createIndex('creatorId', 'creatorId', { unique: false });
+      } else if (oldVersion < 4) {
+        // If upgrading from a version before 4, add the creatorId index to the existing SCHEMAS store
+        const schemasStore = transaction.objectStore(STORES.SCHEMAS);
+        if (!schemasStore.indexNames.contains('creatorId')) {
+          schemasStore.createIndex('creatorId', 'creatorId', { unique: false });
+        }
+      }
+
+      // Create schema versions store (new in version 4)
+      if (!db.objectStoreNames.contains(STORES.SCHEMA_VERSIONS)) {
+        const schemaVersionsStore = db.createObjectStore(STORES.SCHEMA_VERSIONS, { keyPath: 'id', autoIncrement: true });
+        schemaVersionsStore.createIndex('schemaId', 'schemaId', { unique: false });
+        schemaVersionsStore.createIndex('userId', 'userId', { unique: false });
+        schemaVersionsStore.createIndex('timestamp', 'timestamp', { unique: false });
       }
     };
   });
@@ -724,14 +794,21 @@ export const schemaOperations = {
     name: string,
     schemaDefinition: string,
     description?: string,
-    endpointUrl?: string
+    endpointUrl?: string,
+    creatorId?: number
   ): Promise<number> {
     try {
       const now = new Date();
 
-      return await performTransaction<number>(STORES.SCHEMAS, 'readwrite', (store) => {
+      // If creatorId is not provided, try to get the current user ID
+      if (!creatorId) {
+        console.warn('Schema created without specifying a creator ID');
+      }
+
+      const schemaId = await performTransaction<number>(STORES.SCHEMAS, 'readwrite', (store) => {
         const schema: Schema = {
           projectId,
+          creatorId: creatorId || 0, // Default to 0 if no creator ID is provided
           name,
           description,
           endpointUrl,
@@ -741,6 +818,24 @@ export const schemaOperations = {
         };
         return store.add(schema);
       });
+
+      // If a creator ID is provided, create an initial version record
+      if (creatorId && schemaId) {
+        try {
+          await this.saveVersion(schemaId, creatorId, {
+            name,
+            schemaDefinition,
+            description,
+            endpointUrl
+          }, 'Initial version');
+        } catch (versionError) {
+          // Log the error but don't fail the schema creation
+          console.warn('Failed to save initial schema version:', versionError);
+          console.warn('Schema created successfully, but version history could not be saved.');
+        }
+      }
+
+      return schemaId;
     } catch (error) {
       console.error('Error in create schema:', error);
       throw new Error(`Database error while creating schema: ${error instanceof Error ? error.message : String(error)}`);
@@ -786,7 +881,8 @@ export const schemaOperations = {
 
   async update(
     id: number,
-    data: Partial<Omit<Schema, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>>
+    data: Partial<Omit<Schema, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>>,
+    userId?: number
   ): Promise<void> {
     try {
       // First get the schema
@@ -814,20 +910,284 @@ export const schemaOperations = {
       await performTransaction<IDBValidKey>(STORES.SCHEMAS, 'readwrite', (store) => {
         return store.put(updatedSchema);
       });
+
+      // If userId is provided, save a version record
+      if (userId && (data.name || data.description || data.endpointUrl || data.schemaDefinition)) {
+        try {
+          // Create a change description based on what was updated
+          const changes: string[] = [];
+          if (data.name) changes.push('name');
+          if (data.description) changes.push('description');
+          if (data.endpointUrl) changes.push('endpoint URL');
+          if (data.schemaDefinition) changes.push('schema definition');
+
+          const changeDescription = `Updated ${changes.join(', ')}`;
+
+          // Save the version with the decrypted schema definition
+          await this.saveVersion(id, userId, {
+            name: data.name || schema.name,
+            schemaDefinition: data.schemaDefinition || schema.schemaDefinition, // Already decrypted by getById
+            description: data.description !== undefined ? data.description : schema.description,
+            endpointUrl: data.endpointUrl !== undefined ? data.endpointUrl : schema.endpointUrl
+          }, changeDescription);
+        } catch (versionError) {
+          // Log the error but don't fail the schema update
+          console.warn('Failed to save schema version during update:', versionError);
+          console.warn('Schema updated successfully, but version history could not be saved.');
+
+          // If it's a quota error, provide more specific information
+          if (versionError instanceof Error &&
+              (versionError.name === 'QuotaExceededError' ||
+               versionError.message.includes('quota') ||
+               versionError.message.includes('QUOTA_BYTES_PER_ITEM'))) {
+            console.warn('Browser storage quota exceeded. This typically happens with very large schemas.');
+          }
+        }
+      }
     } catch (error) {
       console.error('Error in update schema:', error);
       throw new Error(`Database error while updating schema: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
-  async delete(id: number): Promise<void> {
+  async delete(id: number, userId?: number): Promise<void> {
     try {
+      // If userId is provided, save a final version record before deletion
+      if (userId) {
+        try {
+          const schema = await this.getById(id);
+          if (schema) {
+            await this.saveVersion(id, userId, {
+              name: schema.name,
+              schemaDefinition: schema.schemaDefinition,
+              description: schema.description,
+              endpointUrl: schema.endpointUrl
+            }, 'Schema deleted');
+          }
+        } catch (versionError) {
+          // Log the error but don't fail the schema deletion
+          console.warn('Failed to save final schema version during deletion:', versionError);
+          console.warn('Schema will be deleted, but the final version history record could not be saved.');
+
+          // If it's a quota error, provide more specific information
+          if (versionError instanceof Error &&
+              (versionError.name === 'QuotaExceededError' ||
+               versionError.message.includes('quota') ||
+               versionError.message.includes('QUOTA_BYTES_PER_ITEM'))) {
+            console.warn('Browser storage quota exceeded. This typically happens with very large schemas.');
+          }
+        }
+      }
+
+      // Delete the schema
       await performTransaction<undefined>(STORES.SCHEMAS, 'readwrite', (store) => {
         return store.delete(id);
       });
+
+      // Note: We're not deleting version history, as it might be useful to keep it
     } catch (error) {
       console.error('Error in delete schema:', error);
       throw new Error(`Database error while deleting schema: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Saves a version of a schema
+   * @param schemaId ID of the schema
+   * @param userId ID of the user making the change
+   * @param schemaData Schema data to save
+   * @param changeDescription Description of what was changed
+   * @returns Promise resolving to the new version ID
+   */
+  async saveVersion(
+    schemaId: number,
+    userId: number,
+    schemaData: {
+      name: string;
+      schemaDefinition: string;
+      description?: string;
+      endpointUrl?: string;
+    },
+    changeDescription?: string
+  ): Promise<number> {
+    try {
+      const timestamp = new Date();
+
+      // Check if the database has been upgraded to include the SCHEMA_VERSIONS store
+      const db = await getDB();
+      if (!db.objectStoreNames.contains(STORES.SCHEMA_VERSIONS)) {
+        console.warn('SCHEMA_VERSIONS store not found in database. Schema version history will not be saved.');
+        console.warn('Please reload the application to upgrade the database.');
+        return -1; // Return a dummy ID to allow the operation to continue
+      }
+
+      // Calculate a hash of the schema definition to use as a reference
+      const schemaHash = CryptoJS.SHA256(schemaData.schemaDefinition).toString();
+
+      // Truncate the schema definition if it's too large (limit to ~50KB before encryption)
+      // This helps prevent exceeding IndexedDB's quota limits
+      let truncatedDefinition = schemaData.schemaDefinition;
+      const MAX_SCHEMA_LENGTH = 50000; // ~50KB
+      let isTruncated = false;
+
+      if (truncatedDefinition.length > MAX_SCHEMA_LENGTH) {
+        truncatedDefinition = truncatedDefinition.substring(0, MAX_SCHEMA_LENGTH);
+        isTruncated = true;
+        console.warn(`Schema definition truncated for version history (original size: ${schemaData.schemaDefinition.length} chars)`);
+      }
+
+      return await performTransaction<number>(STORES.SCHEMA_VERSIONS, 'readwrite', (store) => {
+        const schemaVersion: SchemaVersion = {
+          schemaId,
+          userId,
+          timestamp,
+          name: schemaData.name,
+          // Store the truncated definition or just the hash if severely truncated
+          schemaDefinition: isTruncated
+            ? encryptData(truncatedDefinition + `\n\n/* Schema truncated. Full length: ${schemaData.schemaDefinition.length} chars, hash: ${schemaHash} */`)
+            : encryptData(truncatedDefinition),
+          description: schemaData.description,
+          endpointUrl: schemaData.endpointUrl,
+          changeDescription: isTruncated
+            ? (changeDescription || '') + ' (Note: Schema definition truncated for storage)'
+            : changeDescription
+        };
+        return store.add(schemaVersion);
+      });
+    } catch (error) {
+      console.error('Error in saveVersion:', error);
+
+      // Check specifically for quota exceeded errors
+      if (error instanceof Error &&
+          (error.name === 'QuotaExceededError' ||
+           error.message.includes('quota') ||
+           error.message.includes('QUOTA_BYTES_PER_ITEM'))) {
+        console.warn('Storage quota exceeded when saving schema version. Version history will be limited.');
+        return -1;
+      }
+
+      // For other errors, log a warning and return a dummy ID
+      // This allows schema creation to succeed even if version history can't be saved
+      console.warn('Failed to save schema version. This may be because the database needs to be upgraded.');
+      console.warn('Please reload the application to upgrade the database.');
+      return -1;
+    }
+  },
+
+  /**
+   * Gets all versions of a schema
+   * @param schemaId ID of the schema
+   * @returns Promise resolving to an array of schema versions
+   */
+  async getVersions(schemaId: number): Promise<SchemaVersion[]> {
+    try {
+      // Check if the database has been upgraded to include the SCHEMA_VERSIONS store
+      const db = await getDB();
+      if (!db.objectStoreNames.contains(STORES.SCHEMA_VERSIONS)) {
+        console.warn('SCHEMA_VERSIONS store not found in database. Schema version history is not available.');
+        console.warn('Please reload the application to upgrade the database.');
+        return []; // Return an empty array to allow the operation to continue
+      }
+
+      const versions = await performTransaction<SchemaVersion[]>(STORES.SCHEMA_VERSIONS, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      // Filter versions by schemaId and decrypt schema definitions
+      return versions
+        .filter(version => version.schemaId === schemaId)
+        .map(version => {
+          try {
+            // Decrypt the schema definition
+            const decryptedDefinition = decryptData(version.schemaDefinition);
+
+            return {
+              ...version,
+              schemaDefinition: decryptedDefinition
+            };
+          } catch (decryptError) {
+            console.error('Error decrypting schema definition:', decryptError);
+            // If decryption fails, return a placeholder
+            return {
+              ...version,
+              schemaDefinition: '/* Error decrypting schema definition. This may be due to data corruption or browser storage limitations. */'
+            };
+          }
+        })
+        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()); // Sort by timestamp, newest first
+    } catch (error) {
+      console.error('Error in getVersions:', error);
+      // Instead of throwing an error, log a warning and return an empty array
+      console.warn('Failed to retrieve schema versions. This may be because the database needs to be upgraded.');
+      console.warn('Please reload the application to upgrade the database.');
+      return [];
+    }
+  },
+
+  /**
+   * Gets a specific version of a schema
+   * @param versionId ID of the version
+   * @returns Promise resolving to the schema version if found, undefined otherwise
+   */
+  async getVersionById(versionId: number): Promise<SchemaVersion | undefined> {
+    try {
+      // Check if the database has been upgraded to include the SCHEMA_VERSIONS store
+      const db = await getDB();
+      if (!db.objectStoreNames.contains(STORES.SCHEMA_VERSIONS)) {
+        console.warn('SCHEMA_VERSIONS store not found in database. Schema version history is not available.');
+        console.warn('Please reload the application to upgrade the database.');
+        return undefined; // Return undefined to allow the operation to continue
+      }
+
+      const version = await performTransaction<SchemaVersion | undefined>(STORES.SCHEMA_VERSIONS, 'readonly', (store) => {
+        return store.get(versionId);
+      });
+
+      if (version) {
+        try {
+          // Decrypt schema definition
+          version.schemaDefinition = decryptData(version.schemaDefinition);
+        } catch (decryptError) {
+          console.error('Error decrypting schema definition:', decryptError);
+          // If decryption fails, provide a placeholder
+          version.schemaDefinition = '/* Error decrypting schema definition. This may be due to data corruption or browser storage limitations. */';
+        }
+      }
+
+      return version;
+    } catch (error) {
+      console.error('Error in getVersionById:', error);
+      // Instead of throwing an error, log a warning and return undefined
+      console.warn('Failed to retrieve schema version. This may be because the database needs to be upgraded.');
+      console.warn('Please reload the application to upgrade the database.');
+      return undefined;
+    }
+  },
+
+  /**
+   * Gets the creator of a schema
+   * @param schemaId ID of the schema
+   * @returns Promise resolving to the user who created the schema, or undefined if not found
+   */
+  async getCreator(schemaId: number): Promise<User | undefined> {
+    try {
+      const schema = await this.getById(schemaId);
+      if (!schema) {
+        return undefined;
+      }
+
+      // Handle case where creatorId might not exist in older schemas
+      if (!('creatorId' in schema) || !schema.creatorId) {
+        console.warn(`Schema ${schemaId} does not have a creatorId. This may be because it was created before creator tracking was added.`);
+        return undefined;
+      }
+
+      return await userOperations.getById(schema.creatorId);
+    } catch (error) {
+      console.error('Error in getCreator:', error);
+      // Instead of throwing an error, log a warning and return undefined
+      console.warn('Failed to retrieve schema creator. This may be because the schema was created before creator tracking was added.');
+      return undefined;
     }
   }
 };

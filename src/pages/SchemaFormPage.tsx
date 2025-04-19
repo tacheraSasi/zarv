@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
-import { Project, Schema, projectOperations, projectUserOperations, schemaOperations } from '../utils/db';
+import { Project, Schema, projectOperations, projectUserOperations, schemaOperations, resetDatabase } from '../utils/db';
 import SchemaEditor from '../components/SchemaEditor';
 import SchemaActions from '../components/SchemaActions';
 
@@ -17,6 +17,7 @@ const SchemaFormPage: React.FC = () => {
   const [schemaDefinition, setSchemaDefinition] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -85,6 +86,29 @@ const SchemaFormPage: React.FC = () => {
     loadData();
   }, [projectId, schemaId, currentUser, isEditMode]);
 
+  const handleResetDatabase = async () => {
+    if (!confirm('This will delete all projects, schemas, and users except the admin. Are you sure you want to continue?')) {
+      return;
+    }
+
+    setIsResetting(true);
+    setError('');
+
+    try {
+      await resetDatabase();
+      setError('Database reset successful. The admin user has been preserved. Please log in again.');
+      // Redirect to login page after a short delay
+      setTimeout(() => {
+        navigate('/login');
+      }, 3000);
+    } catch (err) {
+      console.error('Error resetting database:', err);
+      setError('Failed to reset database: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -103,7 +127,39 @@ const SchemaFormPage: React.FC = () => {
       return;
     }
 
+    if (!currentUser?.id) {
+      setError('You must be logged in to save a schema');
+      return;
+    }
+
     try {
+      // Check if the SCHEMA_VERSIONS store exists in the database
+      let needsDatabaseUpgrade = false;
+      try {
+        // Use a Promise to properly wait for the database check
+        needsDatabaseUpgrade = await new Promise<boolean>((resolve, reject) => {
+          const dbRequest = indexedDB.open('SchemaManagerDatabase');
+
+          dbRequest.onerror = (event) => {
+            console.error('Error opening database for version check:', dbRequest.error);
+            // If we can't open the database, assume it needs an upgrade
+            resolve(true);
+          };
+
+          dbRequest.onsuccess = (event) => {
+            const database = dbRequest.result;
+            const needsUpgrade = !database.objectStoreNames.contains('schemaVersions');
+            console.log('Database version check - SCHEMA_VERSIONS exists:', !needsUpgrade);
+            database.close();
+            resolve(needsUpgrade);
+          };
+        });
+      } catch (dbError) {
+        console.error('Error checking database:', dbError);
+        // If we can't check the database, assume it needs an upgrade
+        needsDatabaseUpgrade = true;
+      }
+
       if (isEditMode && schemaId) {
         // Update existing schema
          await schemaOperations.update(parseInt(schemaId), {
@@ -111,8 +167,13 @@ const SchemaFormPage: React.FC = () => {
           description: description.trim() || undefined,
           endpointUrl: endpointUrl.trim() || undefined,
           schemaDefinition: schemaDefinition.trim()
-        });
-        navigate(`/projects/${projectId}/schemas/${schemaId}`);
+        }, currentUser.id); // Pass the current user ID
+
+        if (needsDatabaseUpgrade) {
+          setError('Schema saved successfully, but version history could not be saved. Please reload the application to upgrade the database.');
+        } else {
+          navigate(`/projects/${projectId}/schemas/${schemaId}`);
+        }
       } else {
         // Create new schema
         const newSchemaId = await schemaOperations.create(
@@ -120,14 +181,47 @@ const SchemaFormPage: React.FC = () => {
           name.trim(),
           schemaDefinition.trim(),
           description.trim() || undefined,
-          endpointUrl.trim() || undefined
+          endpointUrl.trim() || undefined,
+          currentUser.id // Pass the current user ID
         );
-        navigate(`/projects/${projectId}/schemas/${newSchemaId}`);
+
+        if (needsDatabaseUpgrade) {
+          setError('Schema saved successfully, but version history could not be saved. Please reload the application to upgrade the database.');
+        } else {
+          navigate(`/projects/${projectId}/schemas/${newSchemaId}`);
+        }
       }
 
     } catch (err) {
       console.error('Error saving schema:', err);
-      setError('Failed to save schema');
+
+      // Handle specific error cases with more informative messages
+      if (err instanceof Error) {
+        if (err.message.includes('Failed to execute \'transaction\' on \'IDBDatabase\': One of the specified object stores was not found')) {
+          setError('Schema could not be saved because the database needs to be upgraded. Please reload the application and try again.');
+        } else if (err.message.includes('QUOTA_BYTES_PER_ITEM quota exceeded') ||
+                  err.message.includes('QuotaExceededError') ||
+                  err.message.toLowerCase().includes('quota')) {
+          // The schema was likely saved, but version history couldn't be saved due to quota limits
+          setError('Schema saved successfully, but version history could not be saved due to browser storage limits. ' +
+                  'This typically happens with very large schemas. The schema functionality will work normally, ' +
+                  'but version history may be limited or unavailable for this schema.');
+
+          // Navigate to the schema detail page after a delay to show the message
+          setTimeout(() => {
+            if (isEditMode && schemaId) {
+              navigate(`/projects/${projectId}/schemas/${schemaId}`);
+            } else {
+              // For new schemas, we don't have the ID, so navigate back to the project
+              navigate(`/projects/${projectId}`);
+            }
+          }, 5000); // 5 second delay to allow user to read the message
+        } else {
+          setError('Failed to save schema: ' + err.message);
+        }
+      } else {
+        setError('Failed to save schema: ' + String(err));
+      }
     }
   };
 
@@ -162,7 +256,36 @@ const SchemaFormPage: React.FC = () => {
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+            <p>{error}</p>
+
+            {error.includes('database needs to be upgraded') || error.includes('version history could not be saved') ? (
+              <div className="mt-3">
+                <p className="text-sm mb-2">
+                  To fix this issue, you can either:
+                </p>
+                <ul className="list-disc pl-5 text-sm mb-2">
+                  <li>Reload the page to upgrade the database</li>
+                  <li>Reset the database (this will delete all data except the admin user)</li>
+                </ul>
+                <div className="flex space-x-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  >
+                    Reload Page
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetDatabase}
+                    disabled={isResetting}
+                    className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {isResetting ? 'Resetting...' : 'Reset Database'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 
