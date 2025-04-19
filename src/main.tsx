@@ -10,6 +10,7 @@ import ProjectDetailPage from './pages/ProjectDetailPage'
 import SchemaFormPage from './pages/SchemaFormPage'
 import SchemaDetailPage from './pages/SchemaDetailPage'
 import UserManagementPage from './pages/UserManagementPage'
+import UserProfilePage from './pages/UserProfilePage'
 
 // Initialize theme based on localStorage or system preference
 const initializeTheme = () => {
@@ -77,6 +78,14 @@ createRoot(document.getElementById('root')!).render(
             element={
               <ProtectedRoute>
                 <SchemaDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <UserProfilePage />
               </ProtectedRoute>
             }
           />

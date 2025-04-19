@@ -367,8 +367,13 @@ const SchemaDetailPage: React.FC = () => {
                                 </p>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                   {new Date(version.timestamp).toLocaleString()}
-                                  {version.userId && versionUsers[version.userId] &&
-                                    ` by ${versionUsers[version.userId].name}`}
+                                  {version.userId && (
+                                    version.userId === currentUser?.id
+                                      ? " by me"
+                                      : versionUsers[version.userId]
+                                        ? ` by ${versionUsers[version.userId].name}`
+                                        : ""
+                                  )}
                                 </p>
                               </div>
                               <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -407,8 +412,13 @@ const SchemaDetailPage: React.FC = () => {
                           )}
                           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                             Updated: {new Date(selectedVersion.timestamp).toLocaleString()}
-                            {selectedVersion.userId && versionUsers[selectedVersion.userId] &&
-                              ` by ${versionUsers[selectedVersion.userId].name}`}
+                            {selectedVersion.userId && (
+                              selectedVersion.userId === currentUser?.id
+                                ? " by me"
+                                : versionUsers[selectedVersion.userId]
+                                  ? ` by ${versionUsers[selectedVersion.userId].name}`
+                                  : ""
+                            )}
                           </p>
                         </div>
                         <div>
