@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
-import { Project, Schema, SchemaVersion, User, projectOperations, projectUserOperations, schemaOperations } from '../utils/db';
+import { Project, Schema, SchemaVersion, User, projectOperations, projectUserOperations, schemaOperations, userOperations } from '../utils/db';
 import SchemaEditor from '../components/SchemaEditor';
 import SchemaActions from '../components/SchemaActions';
 import SampleDataGenerator from '../components/SampleDataGenerator';
@@ -18,6 +18,7 @@ const SchemaDetailPage: React.FC = () => {
   const [isTestingSchema, setIsTestingSchema] = useState(false);
   const [creator, setCreator] = useState<User | null>(null);
   const [schemaVersions, setSchemaVersions] = useState<SchemaVersion[]>([]);
+  const [versionUsers, setVersionUsers] = useState<Record<number, User>>({});
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<SchemaVersion | null>(null);
   const { currentUser } = useAuth();
@@ -76,6 +77,22 @@ const SchemaDetailPage: React.FC = () => {
         // Load schema versions
         const versionsData = await schemaOperations.getVersions(parseInt(schemaId));
         setSchemaVersions(versionsData);
+
+        // Load user information for each version
+        const users: Record<number, User> = {};
+        for (const version of versionsData) {
+          if (version.userId && !users[version.userId]) {
+            try {
+              const userData = await userOperations.getById(version.userId);
+              if (userData) {
+                users[version.userId] = userData;
+              }
+            } catch (error) {
+              console.error(`Error loading user data for version ${version.id}:`, error);
+            }
+          }
+        }
+        setVersionUsers(users);
       } catch (err) {
         console.error('Error loading data:', err);
         setError('Failed to load data');
@@ -350,6 +367,8 @@ const SchemaDetailPage: React.FC = () => {
                                 </p>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                   {new Date(version.timestamp).toLocaleString()}
+                                  {version.userId && versionUsers[version.userId] &&
+                                    ` by ${versionUsers[version.userId].name}`}
                                 </p>
                               </div>
                               <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -386,6 +405,11 @@ const SchemaDetailPage: React.FC = () => {
                               Endpoint URL: {selectedVersion.endpointUrl}
                             </p>
                           )}
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                            Updated: {new Date(selectedVersion.timestamp).toLocaleString()}
+                            {selectedVersion.userId && versionUsers[selectedVersion.userId] &&
+                              ` by ${versionUsers[selectedVersion.userId].name}`}
+                          </p>
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Schema Definition:</p>
