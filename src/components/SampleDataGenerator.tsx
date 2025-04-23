@@ -29,12 +29,46 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
     maxNumber: 100
   });
 
-  // Auto-generate sample data when component mounts if autoGenerate is true
+  // Auto-generate sample data when component mounts if autoGenerate is true and no cached data exists
   useEffect(() => {
     if (autoGenerate && schemaDefinition) {
-      handleGenerateSampleData(false); // Use cache when auto-generating
+      // Check if cached data exists before generating new data
+      const checkCacheAndGenerate = async () => {
+        // Generate a cache key based on schema definition and options
+        const cacheKey = await import('../utils/cacheService').then(module => {
+          const cacheService = module.default;
+          return cacheService.generateKey(schemaDefinition, { ...options, count });
+        });
+
+        // Check if cached data exists
+        const cachedResult = await import('../utils/cacheService').then(module => {
+          const cacheService = module.default;
+          return cacheService.get(cacheKey);
+        });
+
+        if (cachedResult) {
+          // If cached data exists, use it
+          // The structure is: cachedResult = { data: SampleDataResult, fromCache: true }
+          // And SampleDataResult has a data property with the actual sample data
+          const sampleDataResult = cachedResult.data;
+          if (sampleDataResult && sampleDataResult.data) {
+            setSampleData(sampleDataResult.data);
+            setIsFromCache(true);
+            setIsLoading(false); // Make sure to set loading to false
+            console.log('Using cached sample data on page refresh');
+          } else {
+            // If the cached data structure is not as expected, generate new data
+            handleGenerateSampleData(false);
+          }
+        } else {
+          // If no cached data exists, generate new data
+          handleGenerateSampleData(false);
+        }
+      };
+
+      checkCacheAndGenerate();
     }
-  }, [autoGenerate, schemaDefinition]);
+  }, [autoGenerate, schemaDefinition, options, count]);
 
   const handleGenerateSampleData = async (forceRefresh: boolean = false) => {
     setIsLoading(true);
