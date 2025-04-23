@@ -16,6 +16,7 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState<number>(1);
+  const [isFromCache, setIsFromCache] = useState<boolean>(false);
   const [showOptions, setShowOptions] = useState<boolean>(false);
   const [options, setOptions] = useState<SampleDataOptions>({
     count: 1,
@@ -31,11 +32,11 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
   // Auto-generate sample data when component mounts if autoGenerate is true
   useEffect(() => {
     if (autoGenerate && schemaDefinition) {
-      handleGenerateSampleData();
+      handleGenerateSampleData(false); // Use cache when auto-generating
     }
   }, [autoGenerate, schemaDefinition]);
 
-  const handleGenerateSampleData = async () => {
+  const handleGenerateSampleData = async (forceRefresh: boolean = false) => {
     setIsLoading(true);
     setError(null);
 
@@ -43,15 +44,17 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
       const result: SampleDataResult = await generateAISampleData(schemaDefinition, {
         ...options,
         count
-      });
+      }, forceRefresh);
 
       if (result.success) {
         setSampleData(result.data);
+        setIsFromCache(result.fromCache || false);
       } else {
         setError(result.error || 'Failed to generate sample data');
         // If there's data despite the error, still show it
         if (result.data) {
           setSampleData(result.data);
+          setIsFromCache(result.fromCache || false);
         }
       }
     } catch (err) {
@@ -98,9 +101,11 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
 
   return (
     <div className="mt-6 bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        Sample Data
-      </h3>
+
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          Sample Data Generator
+        </h3>
+
 
       <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
         Sample data is generated using Groq AI, which creates realistic values based on field names.
@@ -243,26 +248,31 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
         </div>
       )}
 
-      <div className="flex space-x-2">
-        <button
-          onClick={handleGenerateSampleData}
-          disabled={isLoading}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-        >
-          {isLoading ? 'Generating...' : 'Regenerate Sample Data'}
-        </button>
+      <div className="flex space-x-2 flex-wrap">
+
+          <button
+              onClick={() => handleGenerateSampleData(true)}
+              disabled={isLoading}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 mb-2"
+          >
+            {isLoading ? 'Generating...' : 'Generate Sample Data'}
+          </button>
+
+
+
+
 
         {sampleData && (
           <>
             <button
               onClick={handleCopySampleData}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mb-2"
             >
               Copy JSON
             </button>
             <button
               onClick={handleDownload}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 mb-2"
             >
               Download JSON
             </button>
@@ -278,9 +288,19 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
 
       {sampleData && (
         <div className="mt-4">
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <div className={"flex justify-between items-center pb-2"}><h4
+              className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Generated Sample Data
           </h4>
+
+            {sampleData && !isLoading && (
+                <div className={`text-xs px-2 py-1 rounded-md ${isFromCache
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>
+                  {isFromCache ? 'From cache' : 'Fresh'}
+                </div>
+            )}
+          </div>
           <div className="bg-gray-50 dark:bg-gray-700 rounded-md p-4 overflow-auto max-h-96">
             <pre className="text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
               {JSON.stringify(sampleData, null, 2)}

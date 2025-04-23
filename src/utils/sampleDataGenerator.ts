@@ -1,5 +1,6 @@
 import { validateWithZod } from './validator';
 import axios from 'axios';
+import cacheService from './cacheService';
 
 // API configuration
 const AI_API_CONFIG = {
@@ -33,6 +34,7 @@ export interface SampleDataResult {
   success: boolean;
   data?: any;
   error?: string;
+  fromCache?: boolean;
 }
 
 /**
@@ -424,14 +426,35 @@ console.log("[response.data]", response.data)
 /**
  * Generates more realistic sample data using AI
  * This function calls Groq API to generate sample data
+ * @param schemaDefinition The schema definition
+ * @param options Options for sample data generation
+ * @param forceRefresh If true, bypasses the cache and fetches fresh data
  */
 export const generateAISampleData = async (
   schemaDefinition: string,
-  options: SampleDataOptions = {}
+  options: SampleDataOptions = {},
+  forceRefresh: boolean = false
 ): Promise<SampleDataResult> => {
   try {
     // Merge default options with provided options
     const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
+
+    // Generate a cache key based on schema definition and options
+    const cacheKey = cacheService.generateKey(schemaDefinition, mergedOptions);
+
+    // Check if we have a cached result and forceRefresh is not true
+    if (!forceRefresh) {
+      const cachedResult = cacheService.get<SampleDataResult>(cacheKey);
+      if (cachedResult) {
+        console.log('Using cached sample data');
+        return {
+          ...cachedResult.data,
+          fromCache: true
+        };
+      }
+    } else {
+      console.log('Force refreshing data, bypassing cache');
+    }
 
     // Try to generate data using Groq API
     let aiGeneratedData;
@@ -447,10 +470,16 @@ export const generateAISampleData = async (
       validationResult = validateWithZod(schemaDefinition, aiGeneratedData);
 
       if (validationResult.isValid) {
-        return {
+        const result = {
           success: true,
-          data: aiGeneratedData
+          data: aiGeneratedData,
+          fromCache: false
         };
+
+        // Store the result in cache
+        cacheService.set(cacheKey, result);
+
+        return result;
       } else {
         console.warn('Groq API generated data failed validation:', validationResult.errors);
         throw new Error('Generated data failed schema validation');
@@ -464,7 +493,10 @@ export const generateAISampleData = async (
     const basicResult = await generateSampleData(schemaDefinition, options);
 
     if (!basicResult.success) {
-      return basicResult;
+      return {
+        ...basicResult,
+        fromCache: false
+      };
     }
 
     // Extract schema info
@@ -479,17 +511,30 @@ export const generateAISampleData = async (
     if (!validationResult.isValid) {
       console.warn('Enhanced sample data failed validation:', validationResult.errors);
       // Fall back to the basic data
-      return basicResult;
+      return {
+        ...basicResult,
+        fromCache: false
+      };
     }
 
-    return {
+    const result = {
       success: true,
-      data: enhancedData
+      data: enhancedData,
+      fromCache: false
     };
+
+    // Store the fallback result in cache too
+    cacheService.set(cacheKey, result);
+
+    return result;
   } catch (error) {
     console.error('Error generating AI sample data:', error);
     // Fall back to basic sample data generation
-    return generateSampleData(schemaDefinition, options);
+    const fallbackResult = await generateSampleData(schemaDefinition, options);
+    return {
+      ...fallbackResult,
+      fromCache: false
+    };
   }
 };
 
