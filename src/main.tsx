@@ -9,6 +9,7 @@ import ProjectsPage from './pages/ProjectsPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import SchemaFormPage from './pages/SchemaFormPage'
 import SchemaDetailPage from './pages/SchemaDetailPage'
+import SchemaVersionsPage from './pages/SchemaVersionsPage'
 import UserManagementPage from './pages/UserManagementPage'
 import UserProfilePage from './pages/UserProfilePage'
 
@@ -78,6 +79,14 @@ createRoot(document.getElementById('root')!).render(
             element={
               <ProtectedRoute>
                 <SchemaDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId/schemas/:schemaId/versions"
+            element={
+              <ProtectedRoute>
+                <SchemaVersionsPage />
               </ProtectedRoute>
             }
           />

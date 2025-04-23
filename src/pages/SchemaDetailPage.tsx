@@ -19,9 +19,6 @@ const SchemaDetailPage: React.FC = () => {
   const [isTestingSchema, setIsTestingSchema] = useState(false);
   const [creator, setCreator] = useState<User | null>(null);
   const [schemaVersions, setSchemaVersions] = useState<SchemaVersion[]>([]);
-  const [versionUsers, setVersionUsers] = useState<Record<number, User>>({});
-  const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [selectedVersion, setSelectedVersion] = useState<SchemaVersion | null>(null);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -78,22 +75,6 @@ const SchemaDetailPage: React.FC = () => {
         // Load schema versions
         const versionsData = await schemaOperations.getVersions(parseInt(schemaId));
         setSchemaVersions(versionsData);
-
-        // Load user information for each version
-        const users: Record<number, User> = {};
-        for (const version of versionsData) {
-          if (version.userId && !users[version.userId]) {
-            try {
-              const userData = await userOperations.getById(version.userId);
-              if (userData) {
-                users[version.userId] = userData;
-              }
-            } catch (error) {
-              console.error(`Error loading user data for version ${version.id}:`, error);
-            }
-          }
-        }
-        setVersionUsers(users);
       } catch (err) {
         console.error('Error loading data:', err);
         setError('Failed to load data');
@@ -268,12 +249,12 @@ const SchemaDetailPage: React.FC = () => {
                       <p>Created: {formatDate(schema.createdAt)}{creator && ` by ${creator.name}`}</p>
                       <p>Last updated: {formatDate(schema.updatedAt)}</p>
                       {schemaVersions.length > 0 && (
-                        <button
-                          onClick={() => setShowVersionHistory(!showVersionHistory)}
+                        <Link
+                          to={`/projects/${projectId}/schemas/${schemaId}/versions`}
                           className="mt-2 text-indigo-600 dark:text-indigo-400 hover:underline flex items-center text-sm"
                         >
-                          {showVersionHistory ? 'Hide Version History' : `View Version History (${schemaVersions.length})`}
-                        </button>
+                          View Version History ({schemaVersions.length})
+                        </Link>
                       )}
                     </div>
                   </div>
@@ -342,110 +323,6 @@ const SchemaDetailPage: React.FC = () => {
                     />
                   </div>
                 </div>
-
-                {/* Schema Version History */}
-                {showVersionHistory && schemaVersions.length > 0 && (
-                  <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
-                      Version History
-                    </h3>
-                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 max-h-96 overflow-y-auto">
-                      <div className="space-y-3">
-                        {schemaVersions.map((version, index) => (
-                          <div
-                            key={version.id}
-                            className={`p-3 rounded-md cursor-pointer transition-colors ${
-                              selectedVersion?.id === version.id 
-                                ? 'bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800' 
-                                : 'bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 border border-gray-200 dark:border-gray-700'
-                            }`}
-                            onClick={() => setSelectedVersion(selectedVersion?.id === version.id ? null : version)}
-                          >
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                  {version.changeDescription || (index === schemaVersions.length - 1 ? 'Initial version' : 'Updated schema')}
-                                </p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                  {new Date(version.timestamp).toLocaleString()}
-                                  {version.userId && (
-                                    version.userId === currentUser?.id
-                                      ? " by me"
-                                      : versionUsers[version.userId]
-                                        ? ` by ${versionUsers[version.userId].name}`
-                                        : ""
-                                  )}
-                                </p>
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {index === 0 ? 'Latest' : `v${schemaVersions.length - index}`}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {selectedVersion && (
-                      <div className="mt-4 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-                        <div className="flex justify-between items-center mb-3">
-                          <h4 className="text-md font-medium text-gray-900 dark:text-white">
-                            Schema Snapshot
-                          </h4>
-                          <button
-                            onClick={() => setSelectedVersion(null)}
-                            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                          >
-                            Close
-                          </button>
-                        </div>
-                        <div className="mb-3">
-                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Name: {selectedVersion.name}</p>
-                          {selectedVersion.description && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                              Description: {selectedVersion.description}
-                            </p>
-                          )}
-                          {selectedVersion.endpointUrl && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                              Endpoint URL: {selectedVersion.endpointUrl}
-                            </p>
-                          )}
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                            Updated: {new Date(selectedVersion.timestamp).toLocaleString()}
-                            {selectedVersion.userId && (
-                              selectedVersion.userId === currentUser?.id
-                                ? " by me"
-                                : versionUsers[selectedVersion.userId]
-                                  ? ` by ${versionUsers[selectedVersion.userId].name}`
-                                  : ""
-                            )}
-                          </p>
-                        </div>
-
-                        <div className="mb-4">
-                          <DiffViewer 
-                            oldText={selectedVersion.schemaDefinition}
-                            newText={schema?.schemaDefinition || ''}
-                            title="Schema Comparison"
-                            oldLabel={`Version ${schemaVersions.length - schemaVersions.findIndex(v => v.id === selectedVersion.id)}`}
-                            newLabel="Current Version"
-                            filename={`${schema?.name || 'schema'}.js`}
-                          />
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Schema Definition:</p>
-                          <SchemaEditor
-                            value={selectedVersion.schemaDefinition}
-                            readOnly={true}
-                            height="200px"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {testResult && (
                   <div className={`mt-4 p-4 rounded-md ${testResult.success ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
