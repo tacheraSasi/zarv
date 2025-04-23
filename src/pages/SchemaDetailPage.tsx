@@ -6,6 +6,7 @@ import { Project, Schema, SchemaVersion, User, projectOperations, projectUserOpe
 import SchemaEditor from '../components/SchemaEditor';
 import SchemaActions from '../components/SchemaActions';
 import SampleDataGenerator from '../components/SampleDataGenerator';
+import DiffViewer from '../components/diff';
 import { testSchema, SchemaTestResult } from '../utils/schemaTestService';
 
 const SchemaDetailPage: React.FC = () => {
@@ -421,6 +422,18 @@ const SchemaDetailPage: React.FC = () => {
                             )}
                           </p>
                         </div>
+
+                        <div className="mb-4">
+                          <DiffViewer 
+                            oldText={selectedVersion.schemaDefinition}
+                            newText={schema?.schemaDefinition || ''}
+                            title="Schema Comparison"
+                            oldLabel={`Version ${schemaVersions.length - schemaVersions.findIndex(v => v.id === selectedVersion.id)}`}
+                            newLabel="Current Version"
+                            filename={`${schema?.name || 'schema'}.js`}
+                          />
+                        </div>
+
                         <div>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Schema Definition:</p>
                           <SchemaEditor
