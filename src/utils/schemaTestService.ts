@@ -23,6 +23,7 @@ export interface SchemaTestResult {
  * @param headers Optional headers to include in the request
  * @param requestBody Optional request body for POST, PUT, PATCH requests
  * @param zodVersion The version of Zod to use for validation
+ * @param projectId Optional project ID for retrieving project-specific headers
  * @returns Promise resolving to a test result object
  */
 export const testSchema = async (
@@ -31,11 +32,12 @@ export const testSchema = async (
   method: string = 'GET',
   headers: Record<string, string> = {},
   requestBody?: any,
-  zodVersion: string = '3.24.2'
+  zodVersion: string = '3.24.2',
+  projectId?: number
 ): Promise<SchemaTestResult> => {
   try {
     // Make the API request
-    const apiResponse = await makeApiRequest(endpointUrl, method, headers, requestBody);
+    const apiResponse = await makeApiRequest(endpointUrl, method, headers, requestBody, projectId);
 
     // Check if the request failed
     if (apiResponse.error) {
@@ -83,7 +85,7 @@ export const testSchema = async (
 
 /**
  * Tests multiple schemas against their respective endpoints
- * @param schemas Array of schema objects with id, name, schemaDefinition, and endpointUrl
+ * @param schemas Array of schema objects with id, name, schemaDefinition, endpointUrl, and projectId
  * @param zodVersion The version of Zod to use for validation
  * @returns Promise resolving to an array of test results with schema IDs
  */
@@ -93,6 +95,9 @@ export const testSchemas = async (
     name: string;
     schemaDefinition: string;
     endpointUrl?: string;
+    projectId?: number;
+    method?: string;
+    requestBody?: any;
   }>,
   zodVersion: string = '3.24.2'
 ): Promise<Array<{ schemaId?: number; schemaName: string; result: SchemaTestResult }>> => {
@@ -115,10 +120,11 @@ export const testSchemas = async (
       const result = await testSchema(
         schema.schemaDefinition,
         schema.endpointUrl,
-        'GET',
+        schema.method || 'GET', // Use schema's method if available, otherwise default to GET
         {},
-        undefined,
-        zodVersion
+        schema.requestBody, // Use schema's request body if available
+        zodVersion,
+        schema.projectId
       );
 
       results.push({

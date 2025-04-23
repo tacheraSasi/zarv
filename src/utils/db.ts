@@ -38,6 +38,7 @@ export interface Schema {
   description?: string;
   endpointUrl?: string;
   schemaDefinition: string;
+  httpMethod?: string;  // HTTP method (GET, POST, PUT, PATCH, DELETE)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,12 +52,24 @@ export interface SchemaVersion {
   name: string;  // Schema name at this point in time
   description?: string;  // Schema description at this point in time
   endpointUrl?: string;  // Schema endpoint URL at this point in time
+  httpMethod?: string;  // HTTP method at this point in time
   changeDescription?: string;  // Description of what was changed
+}
+
+export interface ApiHeader {
+  id?: number;
+  name: string;
+  value: string;
+  enabled: boolean;
+  scope: 'global' | 'project';
+  projectId?: number;  // Only required for project-specific headers
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Database name and version
 const DB_NAME = 'SchemaManagerDatabase';
-const DB_VERSION = 4; // Increased to handle schema creator tracking and version history
+const DB_VERSION = 6; // Increased to handle HTTP method in schemas
 
 // Store names
 const STORES = {
@@ -64,7 +77,8 @@ const STORES = {
   PROJECTS: 'projects',
   PROJECT_USERS: 'projectUsers',
   SCHEMAS: 'schemas',
-  SCHEMA_VERSIONS: 'schemaVersions'
+  SCHEMA_VERSIONS: 'schemaVersions',
+  API_HEADERS: 'apiHeaders'
 };
 
 // Database connection
@@ -173,6 +187,22 @@ const initDatabase = (): Promise<IDBDatabase> => {
         schemaVersionsStore.createIndex('schemaId', 'schemaId', { unique: false });
         schemaVersionsStore.createIndex('userId', 'userId', { unique: false });
         schemaVersionsStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // Create API headers store (new in version 5)
+      if (!db.objectStoreNames.contains(STORES.API_HEADERS)) {
+        const apiHeadersStore = db.createObjectStore(STORES.API_HEADERS, { keyPath: 'id', autoIncrement: true });
+        apiHeadersStore.createIndex('name', 'name', { unique: false });
+        apiHeadersStore.createIndex('scope', 'scope', { unique: false });
+        apiHeadersStore.createIndex('projectId', 'projectId', { unique: false });
+        apiHeadersStore.createIndex('scopeProject', ['scope', 'projectId'], { unique: false });
+      }
+
+      // Add httpMethod field to existing schemas (new in version 6)
+      if (oldVersion < 6 && db.objectStoreNames.contains(STORES.SCHEMAS)) {
+        console.log('Upgrading database to version 6: Adding httpMethod field to schemas');
+        // We can't directly modify the schema of existing objects in IndexedDB
+        // Instead, we'll set the httpMethod field to 'GET' for all schemas when they're accessed
       }
     };
   });
@@ -795,7 +825,8 @@ export const schemaOperations = {
     schemaDefinition: string,
     description?: string,
     endpointUrl?: string,
-    creatorId?: number
+    creatorId?: number,
+    httpMethod: string = 'GET'
   ): Promise<number> {
     try {
       const now = new Date();
@@ -813,6 +844,7 @@ export const schemaOperations = {
           description,
           endpointUrl,
           schemaDefinition: encryptData(schemaDefinition), // Encrypt schema definition
+          httpMethod,
           createdAt: now,
           updatedAt: now
         };
@@ -826,7 +858,8 @@ export const schemaOperations = {
             name,
             schemaDefinition,
             description,
-            endpointUrl
+            endpointUrl,
+            httpMethod
           }, 'Initial version');
         } catch (versionError) {
           // Log the error but don't fail the schema creation
@@ -920,6 +953,7 @@ export const schemaOperations = {
           if (data.description) changes.push('description');
           if (data.endpointUrl) changes.push('endpoint URL');
           if (data.schemaDefinition) changes.push('schema definition');
+          if (data.httpMethod) changes.push('HTTP method');
 
           const changeDescription = `Updated ${changes.join(', ')}`;
 
@@ -928,7 +962,8 @@ export const schemaOperations = {
             name: data.name || schema.name,
             schemaDefinition: data.schemaDefinition || schema.schemaDefinition, // Already decrypted by getById
             description: data.description !== undefined ? data.description : schema.description,
-            endpointUrl: data.endpointUrl !== undefined ? data.endpointUrl : schema.endpointUrl
+            endpointUrl: data.endpointUrl !== undefined ? data.endpointUrl : schema.endpointUrl,
+            httpMethod: data.httpMethod !== undefined ? data.httpMethod : schema.httpMethod
           }, changeDescription);
         } catch (versionError) {
           // Log the error but don't fail the schema update
@@ -961,7 +996,8 @@ export const schemaOperations = {
               name: schema.name,
               schemaDefinition: schema.schemaDefinition,
               description: schema.description,
-              endpointUrl: schema.endpointUrl
+              endpointUrl: schema.endpointUrl,
+              httpMethod: schema.httpMethod
             }, 'Schema deleted');
           }
         } catch (versionError) {
@@ -1007,6 +1043,7 @@ export const schemaOperations = {
       schemaDefinition: string;
       description?: string;
       endpointUrl?: string;
+      httpMethod?: string;
     },
     changeDescription?: string
   ): Promise<number> {
@@ -1048,6 +1085,7 @@ export const schemaOperations = {
             : encryptData(truncatedDefinition),
           description: schemaData.description,
           endpointUrl: schemaData.endpointUrl,
+          httpMethod: schemaData.httpMethod,
           changeDescription: isTruncated
             ? (changeDescription || '') + ' (Note: Schema definition truncated for storage)'
             : changeDescription
@@ -1188,6 +1226,196 @@ export const schemaOperations = {
       // Instead of throwing an error, log a warning and return undefined
       console.warn('Failed to retrieve schema creator. This may be because the schema was created before creator tracking was added.');
       return undefined;
+    }
+  }
+};
+
+// CRUD operations for API Headers
+export const apiHeaderOperations = {
+  /**
+   * Creates a new API header
+   * @param name Header name
+   * @param value Header value
+   * @param enabled Whether the header is enabled
+   * @param scope Scope of the header (global or project)
+   * @param projectId ID of the project (required for project-specific headers)
+   * @returns Promise resolving to the new header's ID
+   */
+  async create(
+    name: string,
+    value: string,
+    enabled: boolean = true,
+    scope: 'global' | 'project',
+    projectId?: number
+  ): Promise<number> {
+    try {
+      // Validate that projectId is provided for project-specific headers
+      if (scope === 'project' && !projectId) {
+        throw new Error('Project ID is required for project-specific headers');
+      }
+
+      const now = new Date();
+
+      return await performTransaction<number>(STORES.API_HEADERS, 'readwrite', (store) => {
+        const header: ApiHeader = {
+          name,
+          value,
+          enabled,
+          scope,
+          projectId,
+          createdAt: now,
+          updatedAt: now
+        };
+        return store.add(header);
+      });
+    } catch (error) {
+      console.error('Error in create API header:', error);
+      throw new Error(`Database error while creating API header: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets an API header by ID
+   * @param id ID of the header
+   * @returns Promise resolving to the header if found, undefined otherwise
+   */
+  async getById(id: number): Promise<ApiHeader | undefined> {
+    try {
+      return await performTransaction<ApiHeader | undefined>(STORES.API_HEADERS, 'readonly', (store) => {
+        return store.get(id);
+      });
+    } catch (error) {
+      console.error('Error in getById:', error);
+      throw new Error(`Database error while retrieving API header: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets all API headers
+   * @returns Promise resolving to an array of all headers
+   */
+  async getAll(): Promise<ApiHeader[]> {
+    try {
+      return await performTransaction<ApiHeader[]>(STORES.API_HEADERS, 'readonly', (store) => {
+        return store.getAll();
+      });
+    } catch (error) {
+      console.error('Error in getAll:', error);
+      throw new Error(`Database error while retrieving API headers: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets all global API headers
+   * @returns Promise resolving to an array of global headers
+   */
+  async getGlobalHeaders(): Promise<ApiHeader[]> {
+    try {
+      const headers = await this.getAll();
+      return headers.filter(header => header.scope === 'global');
+    } catch (error) {
+      console.error('Error in getGlobalHeaders:', error);
+      throw new Error(`Database error while retrieving global API headers: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets all project-specific API headers for a project
+   * @param projectId ID of the project
+   * @returns Promise resolving to an array of project-specific headers
+   */
+  async getProjectHeaders(projectId: number): Promise<ApiHeader[]> {
+    try {
+      const headers = await this.getAll();
+      return headers.filter(header => header.scope === 'project' && header.projectId === projectId);
+    } catch (error) {
+      console.error('Error in getProjectHeaders:', error);
+      throw new Error(`Database error while retrieving project API headers: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets all headers applicable to a project (global headers + project-specific headers)
+   * @param projectId ID of the project
+   * @returns Promise resolving to an array of applicable headers
+   */
+  async getApplicableHeaders(projectId: number): Promise<ApiHeader[]> {
+    try {
+      const headers = await this.getAll();
+      return headers.filter(header => 
+        (header.scope === 'global') || 
+        (header.scope === 'project' && header.projectId === projectId)
+      );
+    } catch (error) {
+      console.error('Error in getApplicableHeaders:', error);
+      throw new Error(`Database error while retrieving applicable API headers: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Updates an API header
+   * @param id ID of the header to update
+   * @param updates Object containing the fields to update
+   * @returns Promise resolving to true if successful, false if header not found
+   */
+  async update(
+    id: number,
+    updates: {
+      name?: string;
+      value?: string;
+      enabled?: boolean;
+      scope?: 'global' | 'project';
+      projectId?: number;
+    }
+  ): Promise<boolean> {
+    try {
+      // Validate that projectId is provided for project-specific headers
+      if (updates.scope === 'project' && !updates.projectId) {
+        const existingHeader = await this.getById(id);
+        if (!existingHeader || !existingHeader.projectId) {
+          throw new Error('Project ID is required for project-specific headers');
+        }
+      }
+
+      const header = await this.getById(id);
+      if (!header) {
+        return false;
+      }
+
+      return await performTransaction<boolean>(STORES.API_HEADERS, 'readwrite', (store) => {
+        const updatedHeader: ApiHeader = {
+          ...header,
+          ...updates,
+          updatedAt: new Date()
+        };
+        store.put(updatedHeader);
+        return true;
+      });
+    } catch (error) {
+      console.error('Error in update:', error);
+      throw new Error(`Database error while updating API header: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Deletes an API header
+   * @param id ID of the header to delete
+   * @returns Promise resolving to true if successful, false if header not found
+   */
+  async delete(id: number): Promise<boolean> {
+    try {
+      const header = await this.getById(id);
+      if (!header) {
+        return false;
+      }
+
+      return await performTransaction<boolean>(STORES.API_HEADERS, 'readwrite', (store) => {
+        store.delete(id);
+        return true;
+      });
+    } catch (error) {
+      console.error('Error in delete:', error);
+      throw new Error(`Database error while deleting API header: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 };

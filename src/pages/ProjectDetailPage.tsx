@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { Project, Schema, ProjectUser, projectOperations, projectUserOperations, schemaOperations, userOperations } from '../utils/db';
 import { testSchemas, SchemaTestResult } from '../utils/schemaTestService';
+import HeaderConfigModal from '../components/HeaderConfigModal';
 
 const ProjectDetailPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -21,6 +22,7 @@ const ProjectDetailPage: React.FC = () => {
   const [selectedUserId, setSelectedUserId] = useState<number | ''>('');
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [isUserOwner, setIsUserOwner] = useState(false);
+  const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -386,14 +388,26 @@ const ProjectDetailPage: React.FC = () => {
                         <p>Last updated: {formatDate(project.updatedAt)}</p>
                       </div>
                     </div>
-                    {isUserOwner && (
+                    <div className="flex space-x-2">
+                      {isUserOwner && (
+                        <button
+                          onClick={() => setIsEditing(true)}
+                          className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
+                        >
+                          Edit Project
+                        </button>
+                      )}
                       <button
-                        onClick={() => setIsEditing(true)}
-                        className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
+                        onClick={() => setIsHeaderModalOpen(true)}
+                        className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm flex items-center"
+                        title="Configure API Headers"
                       >
-                        Edit Project
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                        </svg>
+                        API Headers
                       </button>
-                    )}
+                    </div>
                   </div>
                 </>
               )}
@@ -532,9 +546,23 @@ const ProjectDetailPage: React.FC = () => {
             {schemas.map((schema) => (
               <div key={schema.id} className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
                 <div className="p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    {schema.name}
-                  </h3>
+                  <div className="flex items-center mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mr-2">
+                      {schema.name}
+                    </h3>
+                    {schema.httpMethod && (
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        schema.httpMethod === 'GET' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                        schema.httpMethod === 'POST' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                        schema.httpMethod === 'PUT' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                        schema.httpMethod === 'PATCH' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
+                        schema.httpMethod === 'DELETE' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                        'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                      }`}>
+                        {schema.httpMethod}
+                      </span>
+                    )}
+                  </div>
                   {schema.description && (
                     <p className="text-gray-600 dark:text-gray-400 mb-2">
                       {schema.description}
@@ -660,6 +688,13 @@ const ProjectDetailPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Header Configuration Modal */}
+      <HeaderConfigModal 
+        isOpen={isHeaderModalOpen} 
+        onClose={() => setIsHeaderModalOpen(false)} 
+        projectId={project?.id ? parseInt(project.id.toString()) : undefined}
+      />
     </Layout>
   );
 };

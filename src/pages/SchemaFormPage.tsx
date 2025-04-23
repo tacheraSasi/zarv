@@ -14,6 +14,7 @@ const SchemaFormPage: React.FC = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [endpointUrl, setEndpointUrl] = useState('');
+  const [httpMethod, setHttpMethod] = useState('GET');
   const [schemaDefinition, setSchemaDefinition] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -73,6 +74,7 @@ const SchemaFormPage: React.FC = () => {
           setName(schemaData.name);
           setDescription(schemaData.description || '');
           setEndpointUrl(schemaData.endpointUrl || '');
+          setHttpMethod(schemaData.httpMethod || 'GET');
           setSchemaDefinition(schemaData.schemaDefinition);
         }
       } catch (err) {
@@ -166,6 +168,7 @@ const SchemaFormPage: React.FC = () => {
           name: name.trim(),
           description: description.trim() || undefined,
           endpointUrl: endpointUrl.trim() || undefined,
+          httpMethod: httpMethod,
           schemaDefinition: schemaDefinition.trim()
         }, currentUser.id); // Pass the current user ID
 
@@ -182,7 +185,8 @@ const SchemaFormPage: React.FC = () => {
           schemaDefinition.trim(),
           description.trim() || undefined,
           endpointUrl.trim() || undefined,
-          currentUser.id // Pass the current user ID
+          currentUser.id, // Pass the current user ID
+          httpMethod // Pass the HTTP method
         );
 
         if (needsDatabaseUpgrade) {
@@ -330,6 +334,24 @@ const SchemaFormPage: React.FC = () => {
                 placeholder="https://api.example.com/endpoint"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
               />
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="httpMethod" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                HTTP Method
+              </label>
+              <select
+                id="httpMethod"
+                value={httpMethod}
+                onChange={(e) => setHttpMethod(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="PATCH">PATCH</option>
+                <option value="DELETE">DELETE</option>
+              </select>
             </div>
 
             <div className="mb-6">

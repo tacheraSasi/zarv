@@ -19,6 +19,7 @@ const SchemaDetailPage: React.FC = () => {
   const [isTestingSchema, setIsTestingSchema] = useState(false);
   const [creator, setCreator] = useState<User | null>(null);
   const [schemaVersions, setSchemaVersions] = useState<SchemaVersion[]>([]);
+  const [requestBody, setRequestBody] = useState<string>('');
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -67,6 +68,7 @@ const SchemaDetailPage: React.FC = () => {
         }
 
         setSchema(schemaData);
+
 
         // Load schema creator
         const creatorData = await schemaOperations.getCreator(parseInt(schemaId));
@@ -156,14 +158,30 @@ const SchemaDetailPage: React.FC = () => {
     setTestResult(null);
 
     try {
+      // Parse request body for methods that support it
+      let parsedBody;
+      if (schema.httpMethod && ['POST', 'PUT', 'PATCH'].includes(schema.httpMethod) && requestBody.trim()) {
+        try {
+          parsedBody = JSON.parse(requestBody);
+        } catch (parseError) {
+          setTestResult({
+            success: false,
+            message: `Invalid JSON in request body: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+          });
+          setIsTestingSchema(false);
+          return;
+        }
+      }
+
       // Use the schema testing service to test the schema
       const result = await testSchema(
         schema.schemaDefinition,
         schema.endpointUrl,
-        'GET', // Default to GET method
+        schema.httpMethod || 'GET', // Use schema's HTTP method
         {}, // No headers by default
-        undefined, // No request body for GET
-        '3.24.2' // Use the latest Zod version
+        parsedBody, // Use parsed request body if available
+        '3.24.2', // Use the latest Zod version
+        schema.projectId // Pass the project ID for project-specific headers
       );
 
       setTestResult(result);
@@ -237,9 +255,23 @@ const SchemaDetailPage: React.FC = () => {
               <div className="p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                      {schema.name}
-                    </h1>
+                    <div className="flex items-center mb-2">
+                      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mr-2">
+                        {schema.name}
+                      </h1>
+                      {schema.httpMethod && (
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          schema.httpMethod === 'GET' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                          schema.httpMethod === 'POST' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                          schema.httpMethod === 'PUT' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                          schema.httpMethod === 'PATCH' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
+                          schema.httpMethod === 'DELETE' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                          'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                        }`}>
+                          {schema.httpMethod}
+                        </span>
+                      )}
+                    </div>
                     {schema.description && (
                       <p className="text-gray-600 dark:text-gray-400 mb-4">
                         {schema.description}
@@ -296,6 +328,28 @@ const SchemaDetailPage: React.FC = () => {
                       height="350px"
                     />
                     <div className="mt-2">
+                      {schema.endpointUrl && (
+                        <div className="mb-4">
+                          <div className="flex flex-col space-y-2">
+                            {schema.httpMethod && ['POST', 'PUT', 'PATCH'].includes(schema.httpMethod) && (
+                              <div>
+                                <label htmlFor="requestBody" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                  Request Body (JSON)
+                                </label>
+                                <textarea
+                                  id="requestBody"
+                                  value={requestBody}
+                                  onChange={(e) => setRequestBody(e.target.value)}
+                                  rows={5}
+                                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white font-mono text-sm"
+                                  placeholder='{\n  "key": "value"\n}'
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       <SchemaActions
                         schemaDefinition={schema.schemaDefinition}
                         schemaName={schema.name}
