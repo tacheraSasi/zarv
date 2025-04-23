@@ -100,7 +100,7 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
                 </div>
 
                 {/* View mode selector */}
-                <div className="border-t border-gray-200 dark:border-gray-700 px-3 py-1.5 flex justify-between items-center bg-gray-50 dark:bg-gray-750">
+                <div className="border-t border-gray-200 dark:border-gray-700 px-3 py-1.5 flex justify-between items-center bg-gray-50 dark:bg-gray-700">
                     <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">{title}</h3>
                     <div className="flex space-x-2">
                         <button 

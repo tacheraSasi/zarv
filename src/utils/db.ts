@@ -39,6 +39,7 @@ export interface Schema {
   endpointUrl?: string;
   schemaDefinition: string;
   httpMethod?: string;  // HTTP method (GET, POST, PUT, PATCH, DELETE)
+  lastRequestBody?: string;  // Last JSON data used for testing the schema
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +54,7 @@ export interface SchemaVersion {
   description?: string;  // Schema description at this point in time
   endpointUrl?: string;  // Schema endpoint URL at this point in time
   httpMethod?: string;  // HTTP method at this point in time
+  lastRequestBody?: string;  // Last JSON data used for testing the schema
   changeDescription?: string;  // Description of what was changed
 }
 
@@ -69,7 +71,7 @@ export interface ApiHeader {
 
 // Database name and version
 const DB_NAME = 'SchemaManagerDatabase';
-const DB_VERSION = 6; // Increased to handle HTTP method in schemas
+const DB_VERSION = 7; // Increased to handle lastRequestBody in schemas
 
 // Store names
 const STORES = {
@@ -203,6 +205,13 @@ const initDatabase = (): Promise<IDBDatabase> => {
         console.log('Upgrading database to version 6: Adding httpMethod field to schemas');
         // We can't directly modify the schema of existing objects in IndexedDB
         // Instead, we'll set the httpMethod field to 'GET' for all schemas when they're accessed
+      }
+
+      // Add lastRequestBody field to existing schemas (new in version 7)
+      if (oldVersion < 7 && db.objectStoreNames.contains(STORES.SCHEMAS)) {
+        console.log('Upgrading database to version 7: Adding lastRequestBody field to schemas');
+        // We can't directly modify the schema of existing objects in IndexedDB
+        // The lastRequestBody field will be undefined for existing schemas until it's set
       }
     };
   });
@@ -845,6 +854,7 @@ export const schemaOperations = {
           endpointUrl,
           schemaDefinition: encryptData(schemaDefinition), // Encrypt schema definition
           httpMethod,
+          lastRequestBody: undefined, // Initialize as undefined
           createdAt: now,
           updatedAt: now
         };
@@ -859,7 +869,8 @@ export const schemaOperations = {
             schemaDefinition,
             description,
             endpointUrl,
-            httpMethod
+            httpMethod,
+            lastRequestBody: undefined
           }, 'Initial version');
         } catch (versionError) {
           // Log the error but don't fail the schema creation
@@ -954,6 +965,7 @@ export const schemaOperations = {
           if (data.endpointUrl) changes.push('endpoint URL');
           if (data.schemaDefinition) changes.push('schema definition');
           if (data.httpMethod) changes.push('HTTP method');
+          if (data.lastRequestBody) changes.push('last request body');
 
           const changeDescription = `Updated ${changes.join(', ')}`;
 
@@ -963,7 +975,8 @@ export const schemaOperations = {
             schemaDefinition: data.schemaDefinition || schema.schemaDefinition, // Already decrypted by getById
             description: data.description !== undefined ? data.description : schema.description,
             endpointUrl: data.endpointUrl !== undefined ? data.endpointUrl : schema.endpointUrl,
-            httpMethod: data.httpMethod !== undefined ? data.httpMethod : schema.httpMethod
+            httpMethod: data.httpMethod !== undefined ? data.httpMethod : schema.httpMethod,
+            lastRequestBody: data.lastRequestBody !== undefined ? data.lastRequestBody : schema.lastRequestBody
           }, changeDescription);
         } catch (versionError) {
           // Log the error but don't fail the schema update
@@ -997,7 +1010,8 @@ export const schemaOperations = {
               schemaDefinition: schema.schemaDefinition,
               description: schema.description,
               endpointUrl: schema.endpointUrl,
-              httpMethod: schema.httpMethod
+              httpMethod: schema.httpMethod,
+              lastRequestBody: schema.lastRequestBody
             }, 'Schema deleted');
           }
         } catch (versionError) {
@@ -1044,6 +1058,7 @@ export const schemaOperations = {
       description?: string;
       endpointUrl?: string;
       httpMethod?: string;
+      lastRequestBody?: string;
     },
     changeDescription?: string
   ): Promise<number> {
@@ -1086,6 +1101,7 @@ export const schemaOperations = {
           description: schemaData.description,
           endpointUrl: schemaData.endpointUrl,
           httpMethod: schemaData.httpMethod,
+          lastRequestBody: schemaData.lastRequestBody,
           changeDescription: isTruncated
             ? (changeDescription || '') + ' (Note: Schema definition truncated for storage)'
             : changeDescription
@@ -1356,7 +1372,7 @@ export const apiHeaderOperations = {
    * Updates an API header
    * @param id ID of the header to update
    * @param updates Object containing the fields to update
-   * @returns Promise resolving to true if successful, false if header not found
+   * @returns Promise resolving to the updated header's ID if successful, false if header not found
    */
   async update(
     id: number,
@@ -1367,7 +1383,7 @@ export const apiHeaderOperations = {
       scope?: 'global' | 'project';
       projectId?: number;
     }
-  ): Promise<boolean> {
+  ): Promise<IDBValidKey | false> {
     try {
       // Validate that projectId is provided for project-specific headers
       if (updates.scope === 'project' && !updates.projectId) {
@@ -1382,14 +1398,13 @@ export const apiHeaderOperations = {
         return false;
       }
 
-      return await performTransaction<boolean>(STORES.API_HEADERS, 'readwrite', (store) => {
+      return await performTransaction<IDBValidKey>(STORES.API_HEADERS, 'readwrite', (store) => {
         const updatedHeader: ApiHeader = {
           ...header,
           ...updates,
           updatedAt: new Date()
         };
-        store.put(updatedHeader);
-        return true;
+        return store.put(updatedHeader);
       });
     } catch (error) {
       console.error('Error in update:', error);
@@ -1400,18 +1415,17 @@ export const apiHeaderOperations = {
   /**
    * Deletes an API header
    * @param id ID of the header to delete
-   * @returns Promise resolving to true if successful, false if header not found
+   * @returns Promise resolving to undefined if successful, false if header not found
    */
-  async delete(id: number): Promise<boolean> {
+  async delete(id: number): Promise<undefined | false> {
     try {
       const header = await this.getById(id);
       if (!header) {
         return false;
       }
 
-      return await performTransaction<boolean>(STORES.API_HEADERS, 'readwrite', (store) => {
-        store.delete(id);
-        return true;
+      return await performTransaction<undefined>(STORES.API_HEADERS, 'readwrite', (store) => {
+        return store.delete(id);
       });
     } catch (error) {
       console.error('Error in delete:', error);

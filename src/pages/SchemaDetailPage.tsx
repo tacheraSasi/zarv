@@ -69,6 +69,10 @@ const SchemaDetailPage: React.FC = () => {
 
         setSchema(schemaData);
 
+        // Set request body from schema if it exists
+        if (schemaData.lastRequestBody) {
+          setRequestBody(schemaData.lastRequestBody);
+        }
 
         // Load schema creator
         const creatorData = await schemaOperations.getCreator(parseInt(schemaId));
@@ -185,6 +189,26 @@ const SchemaDetailPage: React.FC = () => {
       );
 
       setTestResult(result);
+
+      // Save the request body to the schema if it's not empty and the schema supports it
+      if (schema.id && currentUser?.id && schema.httpMethod && 
+          ['POST', 'PUT', 'PATCH'].includes(schema.httpMethod) && 
+          requestBody.trim()) {
+        try {
+          await schemaOperations.update(schema.id, {
+            lastRequestBody: requestBody
+          }, currentUser.id);
+
+          // Update the local schema state
+          setSchema({
+            ...schema,
+            lastRequestBody: requestBody
+          });
+        } catch (updateError) {
+          console.error('Error saving request body:', updateError);
+          // Don't show an error to the user, just log it
+        }
+      }
     } catch (err) {
       console.error('Error testing schema:', err);
       setTestResult({
