@@ -14,6 +14,7 @@ const SchemaVersionsPage: React.FC = () => {
   const [schemaVersions, setSchemaVersions] = useState<SchemaVersion[]>([]);
   const [versionUsers, setVersionUsers] = useState<Record<number, User>>({});
   const [selectedVersion, setSelectedVersion] = useState<SchemaVersion | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -163,7 +164,10 @@ const SchemaVersionsPage: React.FC = () => {
                               ? 'bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800' 
                               : 'bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 border border-gray-200 dark:border-gray-700'
                           }`}
-                          onClick={() => setSelectedVersion(version)}
+                          onClick={() => {
+                            setSelectedVersion(version);
+                            setShowDiff(false);
+                          }}
                         >
                           <div className="flex justify-between items-start">
                             <div>
@@ -228,17 +232,40 @@ const SchemaVersionsPage: React.FC = () => {
                         </p>
                       </div>
 
-                      {/* Only show diff if not viewing the latest version */}
+                      {/* Only show compare button if not viewing the latest version */}
                       {schemaVersions.findIndex(v => v.id === selectedVersion.id) !== 0 && (
                         <div className="mb-4">
-                          <DiffViewer 
-                            oldText={selectedVersion.schemaDefinition}
-                            newText={schema?.schemaDefinition || ''}
-                            title="Schema Comparison"
-                            oldLabel={`Version ${schemaVersions.length - schemaVersions.findIndex(v => v.id === selectedVersion.id)}`}
-                            newLabel="Current Version"
-                            filename={`${schema?.name || 'schema'}.js`}
-                          />
+                          {!showDiff ? (
+                            <button
+                              onClick={() => setShowDiff(true)}
+                              className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm flex items-center"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                              </svg>
+                              Compare with Current Version
+                            </button>
+                          ) : (
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Schema Comparison</h4>
+                                <button
+                                  onClick={() => setShowDiff(false)}
+                                  className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                                >
+                                  Hide Comparison
+                                </button>
+                              </div>
+                              <DiffViewer 
+                                oldText={selectedVersion.schemaDefinition}
+                                newText={schema?.schemaDefinition || ''}
+                                title="Schema Comparison"
+                                oldLabel={`Version ${schemaVersions.length - schemaVersions.findIndex(v => v.id === selectedVersion.id)}`}
+                                newLabel="Current Version"
+                                filename={`${schema?.name || 'schema'}.js`}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
 
