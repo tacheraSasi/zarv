@@ -16,6 +16,7 @@ import SchemaActions from '../components/SchemaActions';
 import SampleDataGenerator from '../components/SampleDataGenerator';
 import {SchemaTestResult, testSchema} from '../utils/schemaTestService';
 import {AiSuggestionResult, generateAiSuggestions} from '../utils/schemaAiHelper';
+import ReactMarkdown from 'react-markdown';
 
 const SchemaDetailPage: React.FC = () => {
   const { projectId, schemaId } = useParams<{ projectId: string; schemaId: string }>();
@@ -469,32 +470,45 @@ const SchemaDetailPage: React.FC = () => {
                                   disabled={isGeneratingAiSuggestion}
                                   className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
                               >
-                                  {isGeneratingAiSuggestion ? 'Generating...' : 'Get AI Suggestions'}
+                                {isGeneratingAiSuggestion ? 'Generating...' : 'Explain with AI'}
                               </button>
                           </div>
-                        <ul className="list-disc pl-5 space-y-1 text-sm">
-                          {testResult.validationResult.errors.map((error, index) => (
-                            <li key={index}>
-                              <span className="font-medium">{error.path.length > 0 ? error.path.join('.') : 'root'}:</span> {error.message}
-                            </li>
-                          ))}
-                        </ul>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="md:col-span-1">
+                            <div className="max-h-60 overflow-y-auto pr-2">
+                              <ul className="list-disc pl-5 space-y-1 text-sm">
+                                {testResult.validationResult.errors.map((error, index) => (
+                                    <li key={index}>
+                                      <span
+                                          className="font-medium">{error.path.length > 0 ? error.path.join('.') : 'root'}:</span> {error.message}
+                                    </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
 
                           {aiSuggestion && (
-                              <div
-                                  className={`mt-4 p-3 rounded-md ${aiSuggestion.success ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
+                              <div className="md:col-span-1">
+                                <div
+                                    className={`p-3 rounded-md ${aiSuggestion.success ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
                                   <h4 className="font-semibold mb-2">AI Suggestions:</h4>
                                   {aiSuggestion.success ? (
-                                      <div className="text-sm whitespace-pre-line">
+                                      <div
+                                          className="text-sm prose dark:prose-invert max-w-none max-h-60 overflow-y-auto">
+                                        <ReactMarkdown>
                                           {aiSuggestion.suggestions}
+                                        </ReactMarkdown>
                                       </div>
                                   ) : (
                                       <div className="text-sm text-red-600 dark:text-red-400">
-                                          {aiSuggestion.error}
+                                        {aiSuggestion.error}
                                       </div>
                                   )}
+                                </div>
                               </div>
                           )}
+                        </div>
                       </div>
                     )}
 
