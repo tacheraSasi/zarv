@@ -17,6 +17,8 @@ import HeaderConfigModal from '../components/HeaderConfigModal';
 import ResourceModal from '../components/ResourceModal';
 import ProjectModal from '../components/ProjectModal';
 import Button from "../components/Button.tsx";
+import emptyResourcesIllustration from '../assets/illustrations/empty-resources.svg';
+import emptyMembersIllustration from '../assets/illustrations/empty-members.svg';
 
 const ProjectDetailPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -483,65 +485,91 @@ const ProjectDetailPage: React.FC = () => {
                       )}
                   </div>
 
-                  <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                          <thead className="bg-gray-50 dark:bg-gray-700">
-                          <tr>
-                              <th scope="col"
-                                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                  Name
-                              </th>
-                              <th scope="col"
-                                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                  Email
-                              </th>
-                              <th scope="col"
-                                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                  Role
-                              </th>
-                              {isUserOwner && (
+                  {/* Check if there are only 1 member (just the owner) or no members */}
+                  {projectUsers.length <= 1 ? (
+                      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8 text-center">
+                          <img
+                              src={emptyMembersIllustration}
+                              alt="No members"
+                              className="mx-auto mb-4 w-40 h-40"
+                          />
+                          <p className="text-gray-600 dark:text-gray-400 mb-4">
+                              This project doesn't have any additional members yet.
+                          </p>
+                          {isUserOwner && (
+                              <button
+                                  onClick={() => {
+                                      setError('');
+                                      setIsMemberModalOpen(true);
+                                  }}
+                                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                              >
+                                  Add Your First Member
+                              </button>
+                          )}
+                      </div>
+                  ) : (
+                      <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+                          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                              <thead className="bg-gray-50 dark:bg-gray-700">
+                              <tr>
                                   <th scope="col"
-                                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                      Actions
+                                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                      Name
                                   </th>
-                              )}
-                          </tr>
-                          </thead>
-                          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                          {projectUsers.map((pu) => (
-                              <tr key={pu.projectUser.id}>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                                      {pu.user.name}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                      {pu.user.email}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            pu.projectUser.role === 'owner'
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                        }`}>
-                          {pu.projectUser.role === 'owner' ? 'Owner' : 'Member'}
-                        </span>
-                                  </td>
+                                  <th scope="col"
+                                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                      Email
+                                  </th>
+                                  <th scope="col"
+                                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                      Role
+                                  </th>
                                   {isUserOwner && (
-                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                          {pu.projectUser.role !== 'owner' && (
-                                              <button
-                                                  onClick={() => handleRemoveUser(pu.user.id)}
-                                                  className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
-                                              >
-                                                  Remove
-                                              </button>
-                                          )}
-                                      </td>
+                                      <th scope="col"
+                                          className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                          Actions
+                                      </th>
                                   )}
                               </tr>
-                          ))}
-                          </tbody>
-                      </table>
-                  </div>
+                              </thead>
+                              <tbody
+                                  className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                              {projectUsers.map((pu) => (
+                                  <tr key={pu.projectUser.id}>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                                          {pu.user.name}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                          {pu.user.email}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                    pu.projectUser.role === 'owner'
+                                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                }`}>
+                                  {pu.projectUser.role === 'owner' ? 'Owner' : 'Member'}
+                                </span>
+                                      </td>
+                                      {isUserOwner && (
+                                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                              {pu.projectUser.role !== 'owner' && (
+                                                  <button
+                                                      onClick={() => handleRemoveUser(pu.user.id)}
+                                                      className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                                                  >
+                                                      Remove
+                                                  </button>
+                                              )}
+                                          </td>
+                                      )}
+                                  </tr>
+                              ))}
+                              </tbody>
+                          </table>
+                      </div>
+                  )}
               </div>
           )}
 
@@ -563,59 +591,78 @@ const ProjectDetailPage: React.FC = () => {
                       </div>
                   </div>
 
-                  {/* Resources Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
-                      {resources.map((resource) => (
-                          <Link
-                              key={resource.id}
-                              to={`/projects/${projectId}/resources/${encodeURIComponent(resource.name)}`}
-                              className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-200"
+                  {/* Resources Grid or Empty State */}
+                  {resources.length === 0 && !groupedSchemas['Uncategorized'] ? (
+                      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8 text-center mb-8">
+                          <img
+                              src={emptyResourcesIllustration}
+                              alt="No resources"
+                              className="mx-auto mb-4 w-40 h-40"
+                          />
+                          <p className="text-gray-600 dark:text-gray-400 mb-4">
+                              You don't have any resources yet.
+                          </p>
+                          <Button
+                              variant="primary"
+                              onClick={() => setIsResourceModalOpen(true)}
                           >
-                              <div className="p-6">
-                                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                                      {resource.name}
-                    </h3>
-                                  <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {groupedSchemas[resource.name] ? groupedSchemas[resource.name].length : 0} {groupedSchemas[resource.name] && groupedSchemas[resource.name].length === 1 ? 'schema' : 'schemas'}
-                      </span>
-                                      <svg xmlns="http://www.w3.org/2000/svg"
-                                           className="h-5 w-5 text-indigo-600 dark:text-indigo-400" fill="none"
-                                           viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                                d="M9 5l7 7-7 7"/>
-                                      </svg>
+                              Add Your First Resource
+                          </Button>
+                      </div>
+                  ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
+                          {resources.map((resource) => (
+                              <Link
+                                  key={resource.id}
+                                  to={`/projects/${projectId}/resources/${encodeURIComponent(resource.name)}`}
+                                  className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-200"
+                              >
+                                  <div className="p-6">
+                                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                                          {resource.name}
+                                      </h3>
+                                      <div className="flex items-center justify-between">
+                                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                                            {groupedSchemas[resource.name] ? groupedSchemas[resource.name].length : 0} {groupedSchemas[resource.name] && groupedSchemas[resource.name].length === 1 ? 'schema' : 'schemas'}
+                                          </span>
+                                          <svg xmlns="http://www.w3.org/2000/svg"
+                                               className="h-5 w-5 text-indigo-600 dark:text-indigo-400" fill="none"
+                                               viewBox="0 0 24 24" stroke="currentColor">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                    d="M9 5l7 7-7 7"/>
+                                          </svg>
+                                      </div>
                                   </div>
-                              </div>
-                          </Link>
-                      ))}
+                              </Link>
+                          ))}
 
-                      {/* Add Uncategorized if there are any */}
-                      {groupedSchemas['Uncategorized'] && groupedSchemas['Uncategorized'].length > 0 && (
-                          <Link
-                              key="Uncategorized"
-                              to={`/projects/${projectId}/resources/Uncategorized`}
-                              className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-200"
-                          >
-                              <div className="p-6">
-                                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                                      Uncategorized
-                                  </h3>
-                                  <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {groupedSchemas['Uncategorized'].length} {groupedSchemas['Uncategorized'].length === 1 ? 'schema' : 'schemas'}
-                      </span>
-                                      <svg xmlns="http://www.w3.org/2000/svg"
-                                           className="h-5 w-5 text-indigo-600 dark:text-indigo-400" fill="none"
-                                           viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                                d="M9 5l7 7-7 7"/>
-                                      </svg>
+                          {/* Add Uncategorized if there are any */}
+                          {groupedSchemas['Uncategorized'] && groupedSchemas['Uncategorized'].length > 0 && (
+                              <Link
+                                  key="Uncategorized"
+                                  to={`/projects/${projectId}/resources/Uncategorized`}
+                                  className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-200"
+                              >
+                                  <div className="p-6">
+                                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                                          Uncategorized
+                                      </h3>
+                                      <div className="flex items-center justify-between">
+                                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                                            {groupedSchemas['Uncategorized'].length} {groupedSchemas['Uncategorized'].length === 1 ? 'schema' : 'schemas'}
+                                          </span>
+                                          <svg xmlns="http://www.w3.org/2000/svg"
+                                               className="h-5 w-5 text-indigo-600 dark:text-indigo-400" fill="none"
+                                               viewBox="0 0 24 24" stroke="currentColor">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                    d="M9 5l7 7-7 7"/>
+                                          </svg>
+                                      </div>
                                   </div>
-                              </div>
-                          </Link>
-                      )}
-                  </div>
+                              </Link>
+                          )}
+                      </div>
+                  )}
 
               </>
         )}

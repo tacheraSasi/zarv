@@ -5,6 +5,7 @@ import {useAuth} from '../contexts/AuthContext';
 import {Project, projectOperations, projectUserOperations} from '../utils/db';
 import Button from '../components/Button';
 import ProjectModal from '../components/ProjectModal';
+import emptyProjectsIllustration from '../assets/illustrations/empty-projects.svg';
 
 const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -107,16 +108,21 @@ const ProjectsPage: React.FC = () => {
           </div>
         ) : projects.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8 text-center">
+            <img
+                src={emptyProjectsIllustration}
+                alt="No projects"
+                className="mx-auto mb-4 w-40 h-40"
+            />
             <p className="text-gray-600 dark:text-gray-400 mb-4">You don't have any projects yet.</p>
-              <Button
-                  onClick={() => {
-                    setCurrentProject(undefined); // Reset for create mode
-                    setIsProjectModalOpen(true);
-                  }}
-              variant="primary"
+            <Button
+                onClick={() => {
+                  setCurrentProject(undefined); // Reset for create mode
+                  setIsProjectModalOpen(true);
+                }}
+                variant="primary"
             >
               Create Your First Project
-              </Button>
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
