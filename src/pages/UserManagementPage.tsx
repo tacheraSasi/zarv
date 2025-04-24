@@ -415,6 +415,7 @@ const UserManagementPage: React.FC = () => {
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
                           className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white transition-all"
+                          placeholder="Enter user's full name"
                           required
                       />
                     </div>
@@ -438,6 +439,7 @@ const UserManagementPage: React.FC = () => {
                           value={editEmail}
                           onChange={(e) => setEditEmail(e.target.value)}
                           className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white transition-all"
+                          placeholder="Enter user's email address"
                           required
                       />
                     </div>
@@ -692,6 +694,7 @@ const UserManagementPage: React.FC = () => {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white transition-all"
+                        placeholder="Enter user's full name"
                         required
                       />
                     </div>
@@ -714,6 +717,7 @@ const UserManagementPage: React.FC = () => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white transition-all"
+                        placeholder="Enter user's email address"
                         required
                       />
                     </div>

@@ -15,6 +15,8 @@ import {
 import {SchemaTestResult, testSchemas} from '../utils/schemaTestService';
 import HeaderConfigModal from '../components/HeaderConfigModal';
 import ResourceModal from '../components/ResourceModal';
+import ProjectModal from '../components/ProjectModal';
+import Button from "../components/Button.tsx";
 
 const ProjectDetailPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -24,9 +26,6 @@ const ProjectDetailPage: React.FC = () => {
     const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedName, setEditedName] = useState('');
-  const [editedDescription, setEditedDescription] = useState('');
   const [batchTestResults, setBatchTestResults] = useState<Array<{ schemaId?: number; schemaName: string; result: SchemaTestResult }> | null>(null);
   const [isTestingSchemas, setIsTestingSchemas] = useState(false);
   const [projectUsers, setProjectUsers] = useState<Array<{ projectUser: ProjectUser; user: { id: number; name: string; email: string } }>>([]);
@@ -37,6 +36,7 @@ const ProjectDetailPage: React.FC = () => {
   const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
     const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
     const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+    const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'resources' | 'members'>('resources');
   const { currentUser } = useAuth();
   const navigate = useNavigate();
@@ -71,8 +71,6 @@ const ProjectDetailPage: React.FC = () => {
         setIsUserOwner(isOwner);
 
         setProject(projectData);
-        setEditedName(projectData.name);
-        setEditedDescription(projectData.description || '');
 
         // Load schemas for this project
         const projectSchemas = await schemaOperations.getByProjectId(parseInt(projectId));
@@ -135,40 +133,6 @@ const ProjectDetailPage: React.FC = () => {
     loadProjectAndSchemas();
   }, [projectId, currentUser]);
 
-  const handleUpdateProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!project?.id || !currentUser?.id) {
-      setError('Project not found or user not logged in');
-      return;
-    }
-
-    if (!editedName.trim()) {
-      setError('Project name is required');
-      return;
-    }
-
-    try {
-      await projectOperations.update(project.id, currentUser.id, {
-        name: editedName.trim(),
-        description: editedDescription.trim() || undefined
-      });
-
-      // Update local state
-      setProject({
-        ...project,
-        name: editedName.trim(),
-        description: editedDescription.trim() || undefined,
-        updatedAt: new Date()
-      });
-
-      setIsEditing(false);
-      setError('');
-    } catch (err) {
-      console.error('Error updating project:', err);
-      setError('Failed to update project: ' + (err instanceof Error ? err.message : String(err)));
-    }
-  };
 
   const handleAddUser = async () => {
     if (!project?.id || !currentUser?.id || selectedUserId === '') {
@@ -330,6 +294,41 @@ const ProjectDetailPage: React.FC = () => {
     return new Date(date).toLocaleDateString();
   };
 
+    const handleProjectSuccess = async (projectId: number) => {
+        if (!currentUser?.id) return;
+
+        try {
+            // Reload project data
+            const projectData = await projectOperations.getById(parseInt(projectId.toString()));
+            if (projectData) {
+                setProject(projectData);
+            }
+        } catch (err) {
+            console.error('Error reloading project:', err);
+            setError('Failed to reload project details');
+        }
+    };
+
+    const handleDeleteProject = async () => {
+        if (!project?.id || !currentUser?.id) {
+            setError('Project not found or user not logged in');
+            return;
+        }
+
+        if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            await projectOperations.delete(project.id, currentUser.id);
+            // Navigate back to projects page
+            navigate('/projects');
+        } catch (err) {
+            console.error('Error deleting project:', err);
+            setError('Failed to delete project: ' + (err instanceof Error ? err.message : String(err)));
+        }
+    };
+
 
   if (isLoading) {
     return (
@@ -383,93 +382,53 @@ const ProjectDetailPage: React.FC = () => {
         {project && (
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden mb-8">
             <div className="p-6">
-              {isEditing ? (
-                <form onSubmit={handleUpdateProject}>
-                  <div className="mb-4">
-                    <label htmlFor="projectName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Project Name
-                    </label>
-                    <input
-                      id="projectName"
-                      type="text"
-                      value={editedName}
-                      onChange={(e) => setEditedName(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="projectDescription" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Description (optional)
-                    </label>
-                    <textarea
-                      id="projectDescription"
-                      value={editedDescription}
-                      onChange={(e) => setEditedDescription(e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                    />
-                  </div>
-                  <div className="flex justify-end space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsEditing(false);
-                        setEditedName(project.name);
-                        setEditedDescription(project.description || '');
-                      }}
-                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                    >
-                      Save Changes
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start">
                     <div>
-                      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                        {project.name}
-                      </h1>
-                      {project.description && (
-                        <p className="text-gray-600 dark:text-gray-400 mb-4">
-                          {project.description}
-                        </p>
-                      )}
-                      <div className="text-sm text-gray-500 dark:text-gray-500">
-                        <p>Created: {formatDate(project.createdAt)}</p>
-                        <p>Last updated: {formatDate(project.updatedAt)}</p>
-                      </div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                            {project.name}
+                        </h1>
+                        {project.description && (
+                            <p className="text-gray-600 dark:text-gray-400 mb-4">
+                                {project.description}
+                            </p>
+                        )}
+                        <div className="text-sm text-gray-500 dark:text-gray-500">
+                            <p>Created: {formatDate(project.createdAt)}</p>
+                            <p>Last updated: {formatDate(project.updatedAt)}</p>
+                        </div>
                     </div>
                     <div className="flex space-x-2">
-                      {isUserOwner && (
+                        {isUserOwner && (
+                            <>
+                                <button
+                                    onClick={() => setIsProjectModalOpen(true)}
+                                    className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
+                                >
+                                    Edit Project
+                                </button>
+                                <button
+                                    onClick={handleDeleteProject}
+                                    className="px-3 py-1 border border-red-300 dark:border-red-600 rounded-md text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900 text-sm"
+                                >
+                                    Delete Project
+                                </button>
+                            </>
+                        )}
                         <button
-                          onClick={() => setIsEditing(true)}
-                          className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
+                            onClick={() => setIsHeaderModalOpen(true)}
+                            className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm flex items-center"
+                            title="Configure API Headers"
                         >
-                          Edit Project
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20"
+                                 fill="currentColor">
+                                <path fillRule="evenodd"
+                                      d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
+                                      clipRule="evenodd"/>
+                            </svg>
+                            API Headers
                         </button>
-                      )}
-                      <button
-                        onClick={() => setIsHeaderModalOpen(true)}
-                        className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm flex items-center"
-                        title="Configure API Headers"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                        </svg>
-                        API Headers
-                      </button>
                     </div>
-                  </div>
-                </>
-              )}
+                </div>
             </div>
           </div>
         )}
@@ -594,12 +553,13 @@ const ProjectDetailPage: React.FC = () => {
                           Resources
                       </h2>
                       <div className="flex space-x-2">
-                          <button
+                          <Button
+                              variant={"primary"}
                               onClick={() => setIsResourceModalOpen(true)}
-                              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+
                           >
                               Add Resource
-                          </button>
+                          </Button>
                       </div>
                   </div>
 
@@ -781,6 +741,17 @@ const ProjectDetailPage: React.FC = () => {
                     </div>
                 </div>
             </div>
+        )}
+
+        {/* Project Modal for Edit */}
+        {project && currentUser && (
+            <ProjectModal
+                isOpen={isProjectModalOpen}
+                onClose={() => setIsProjectModalOpen(false)}
+                onSuccess={handleProjectSuccess}
+                project={project}
+                userId={currentUser.id}
+            />
         )}
     </Layout>
   );

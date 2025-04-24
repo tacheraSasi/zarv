@@ -4,15 +4,15 @@ import Layout from '../components/Layout';
 import {useAuth} from '../contexts/AuthContext';
 import {Project, projectOperations, projectUserOperations} from '../utils/db';
 import Button from '../components/Button';
+import ProjectModal from '../components/ProjectModal';
 
 const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [ownedProjectIds, setOwnedProjectIds] = useState<number[]>([]);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectDescription, setNewProjectDescription] = useState('');
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [currentProject, setCurrentProject] = useState<Project | undefined>(undefined);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -50,69 +50,28 @@ const ProjectsPage: React.FC = () => {
     loadProjects();
   }, [currentUser]);
 
-  const handleCreateProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!currentUser?.id) {
-      setError('You must be logged in to create a project');
-      return;
-    }
-
-    if (!newProjectName.trim()) {
-      setError('Project name is required');
-      return;
-    }
+  const handleProjectSuccess = async (projectId: number) => {
+    if (!currentUser?.id) return;
 
     try {
-      const projectId = await projectOperations.create(
-        currentUser.id,
-        newProjectName.trim(),
-        newProjectDescription.trim() || undefined
-      );
-
       // Reload projects
       const updatedProjects = await projectOperations.getByUserId(currentUser.id);
       setProjects(updatedProjects);
 
-      // Add the new project to ownedProjectIds since the creator is always the owner
-      setOwnedProjectIds(prevIds => [...prevIds, projectId]);
+      // If it's a new project, add it to ownedProjectIds
+      if (!currentProject) {
+        setOwnedProjectIds(prevIds => [...prevIds, projectId]);
+      }
 
-      // Reset form
-      setNewProjectName('');
-      setNewProjectDescription('');
-      setShowCreateForm(false);
       setError('');
 
-      // Navigate to the new project
+      // Navigate to the project
       navigate(`/projects/${projectId}`);
     } catch (err) {
-      console.error('Error creating project:', err);
-      setError('Failed to create project');
+      console.error('Error reloading projects:', err);
     }
   };
 
-  const handleDeleteProject = async (projectId: number) => {
-    if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-      return;
-    }
-
-    if (!currentUser?.id) {
-      setError('You must be logged in to delete a project');
-      return;
-    }
-
-    try {
-      await projectOperations.delete(projectId, currentUser.id);
-      // Remove the deleted project from the state
-      setProjects(projects.filter(project => project.id !== projectId));
-
-      // Remove the project from ownedProjectIds
-      setOwnedProjectIds(prevIds => prevIds.filter(id => id !== projectId));
-    } catch (err) {
-      console.error('Error deleting project:', err);
-      setError('Failed to delete project: ' + (err instanceof Error ? err.message : String(err)));
-    }
-  };
 
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString();
@@ -126,57 +85,19 @@ const ProjectsPage: React.FC = () => {
             Your Projects
           </h1>
             <Button
-            onClick={() => setShowCreateForm(!showCreateForm)}
+                onClick={() => {
+                  setCurrentProject(undefined); // Reset for create mode
+                  setIsProjectModalOpen(true);
+                }}
             variant="primary"
           >
-            {showCreateForm ? 'Cancel' : 'Create Project'}
+              Create Project
             </Button>
         </div>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
-          </div>
-        )}
-
-        {showCreateForm && (
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-6">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Create New Project</h2>
-            <form onSubmit={handleCreateProject}>
-              <div className="mb-4">
-                <label htmlFor="projectName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Project Name
-                </label>
-                <input
-                  id="projectName"
-                  type="text"
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label htmlFor="projectDescription" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Description (optional)
-                </label>
-                <textarea
-                  id="projectDescription"
-                  value={newProjectDescription}
-                  onChange={(e) => setNewProjectDescription(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                />
-              </div>
-              <div className="flex justify-end">
-                  <Button
-                  type="submit"
-                  variant="primary"
-                >
-                  Create
-                  </Button>
-              </div>
-            </form>
           </div>
         )}
 
@@ -188,7 +109,10 @@ const ProjectsPage: React.FC = () => {
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8 text-center">
             <p className="text-gray-600 dark:text-gray-400 mb-4">You don't have any projects yet.</p>
               <Button
-              onClick={() => setShowCreateForm(true)}
+                  onClick={() => {
+                    setCurrentProject(undefined); // Reset for create mode
+                    setIsProjectModalOpen(true);
+                  }}
               variant="primary"
             >
               Create Your First Project
@@ -218,21 +142,23 @@ const ProjectsPage: React.FC = () => {
                   >
                     View Details
                   </Link>
-                  {project.id && ownedProjectIds.includes(project.id) && (
-                      <Button
-                      onClick={() => project.id && handleDeleteProject(project.id)}
-                      variant="danger"
-                      className="text-sm py-1 px-2"
-                    >
-                      Delete
-                      </Button>
-                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Project Modal for Create/Edit */}
+      {currentUser && (
+          <ProjectModal
+              isOpen={isProjectModalOpen}
+              onClose={() => setIsProjectModalOpen(false)}
+              onSuccess={handleProjectSuccess}
+              project={currentProject}
+              userId={currentUser.id}
+          />
+      )}
     </Layout>
   );
 };

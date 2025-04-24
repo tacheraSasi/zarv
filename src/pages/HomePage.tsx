@@ -14,10 +14,10 @@ const HomePage: React.FC = () => {
             className="py-12 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-3xl shadow-xl mb-16 relative overflow-hidden">
           <div className="absolute inset-0 bg-grid-white/[0.05] bg-[length:20px_20px]"></div>
           <div className="relative z-10 px-6 py-16 sm:px-12 sm:py-24">
-            <h1 className="text-5xl font-extrabold text-white mb-6 tracking-tight">
+            <h1 className="text-5xl font-extrabold text-white mb-6 tracking-tight text-center">
               Welcome to <span className="text-yellow-300">ZARV</span>
             </h1>
-            <p className="text-2xl text-white/90 mb-10 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-2xl text-white/90 mb-10 max-w-3xl mx-auto text-center leading-relaxed">
               A powerful tool for managing, testing, and validating API schemas with advanced features
             </p>
 
@@ -281,7 +281,7 @@ const HomePage: React.FC = () => {
                 to={isAuthenticated ? "/projects" : "/login"}
                 className="inline-block px-8 py-4 bg-white text-indigo-600 font-bold rounded-xl hover:bg-yellow-100 transition-colors shadow-lg transform hover:scale-105 duration-200"
             >
-              {isAuthenticated ? "Go to Dashboard" : "Get Started Now"}
+              {isAuthenticated ? "Go to Projects" : "Get Started Now"}
             </Link>
           </div>
         </div>

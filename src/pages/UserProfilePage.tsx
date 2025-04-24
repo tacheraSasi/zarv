@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import React, {useEffect, useState} from 'react';
+import {Navigate} from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useAuth } from '../contexts/AuthContext';
-import { User, userOperations } from '../utils/db';
+import {useAuth} from '../contexts/AuthContext';
+import {User} from '../utils/db';
 import CryptoJS from 'crypto-js';
 
 const UserProfilePage: React.FC = () => {
@@ -170,6 +170,7 @@ const UserProfilePage: React.FC = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                  placeholder="Enter your full name"
                   required
                 />
               </div>
@@ -273,6 +274,7 @@ const UserProfilePage: React.FC = () => {
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                  placeholder="Enter your current password"
                   required
                 />
               </div>
@@ -287,6 +289,7 @@ const UserProfilePage: React.FC = () => {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                  placeholder="Create a new password (min. 6 characters)"
                   required
                   minLength={6}
                 />
@@ -303,6 +306,7 @@ const UserProfilePage: React.FC = () => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                  placeholder="Re-enter your new password"
                   required
                 />
               </div>
