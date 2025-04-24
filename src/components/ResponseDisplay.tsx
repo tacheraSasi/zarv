@@ -1,6 +1,4 @@
-import React, { useRef } from 'react';
-import Editor from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
+import React from 'react';
 
 interface ValidationError {
   path: string[];

@@ -10,12 +10,10 @@ interface DiffViewerProps {
     filename?: string;
 }
 
-const DiffViewer: React.FC<DiffViewerProps> = ({ 
-    oldText = '', 
-    newText = '', 
+const DiffViewer: React.FC<DiffViewerProps> = ({
+    oldText = '',
+    newText = '',
     title = 'Diff Viewer',
-    oldLabel = 'Old Version',
-    newLabel = 'New Version',
     filename = 'schema.js'
 }) => {
     const [viewMode, setViewMode] = useState<'unified' | 'side-by-side'>('unified');
@@ -103,8 +101,8 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
                 <div className="border-t border-gray-200 dark:border-gray-700 px-3 py-1.5 flex justify-between items-center bg-gray-50 dark:bg-gray-700">
                     <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">{title}</h3>
                     <div className="flex space-x-2">
-                        <button 
-                            onClick={() => setViewMode('unified')} 
+                        <button
+                            onClick={() => setViewMode('unified')}
                             className={`px-2 py-0.5 text-xs rounded transition-colors ${
                                 viewMode === 'unified' 
                                     ? 'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-100' 
@@ -113,8 +111,8 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
                         >
                             Unified
                         </button>
-                        <button 
-                            onClick={() => setViewMode('side-by-side')} 
+                        <button
+                            onClick={() => setViewMode('side-by-side')}
                             className={`px-2 py-0.5 text-xs rounded transition-colors ${
                                 viewMode === 'side-by-side' 
                                     ? 'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-100' 
@@ -131,9 +129,9 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm border-spacing-0">
                         <tbody className="font-mono">
-                            {processedDiffs.flatMap((part, partIndex) => 
+                            {processedDiffs.flatMap((part, partIndex) =>
                                 part.lines.map((line, lineIndex) => (
-                                    <tr 
+                                    <tr
                                         key={`${partIndex}-${lineIndex}`}
                                         className={
                                             part.added
@@ -195,9 +193,9 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm border-spacing-0">
                             <tbody className="font-mono">
-                                {processedDiffs.flatMap((part, partIndex) => 
+                                {processedDiffs.flatMap((part, partIndex) =>
                                     part.lines.filter(line => line.oldLineNumber !== null).map((line, lineIndex) => (
-                                        <tr 
+                                        <tr
                                             key={`old-${partIndex}-${lineIndex}`}
                                             className={
                                                 part.removed
@@ -245,9 +243,9 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm border-spacing-0">
                             <tbody className="font-mono">
-                                {processedDiffs.flatMap((part, partIndex) => 
+                                {processedDiffs.flatMap((part, partIndex) =>
                                     part.lines.filter(line => line.newLineNumber !== null).map((line, lineIndex) => (
-                                        <tr 
+                                        <tr
                                             key={`new-${partIndex}-${lineIndex}`}
                                             className={
                                                 part.added
@@ -295,20 +293,5 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
         </div>
     );
 };
-
-// Sample usage for testing
-const sampleOldText = `Line 1\nLine 2\nLine 3`;
-const sampleNewText = `Line 1\nLine 2 changed\nLine 4`;
-
-export const SampleDiff = () => (
-    <DiffViewer 
-        oldText={sampleOldText} 
-        newText={sampleNewText} 
-        filename="example.js"
-        title="Sample Diff"
-        oldLabel="Previous Version"
-        newLabel="Current Version"
-    />
-);
 
 export default DiffViewer;
