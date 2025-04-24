@@ -36,6 +36,7 @@ const ProjectDetailPage: React.FC = () => {
   const [isUserOwner, setIsUserOwner] = useState(false);
   const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
     const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
+    const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'resources' | 'members'>('resources');
   const { currentUser } = useAuth();
   const navigate = useNavigate();
@@ -206,9 +207,8 @@ const ProjectDetailPage: React.FC = () => {
         .map(user => ({ id: user.id!, name: user.name, email: user.email }));
       setAvailableUsers(availableUsersList);
 
-      // Reset form
+        // Reset form and close modal
       setSelectedUserId('');
-      setIsAddingUser(false);
       setError('');
     } catch (err) {
       console.error('Error adding user to project:', err);
@@ -513,44 +513,16 @@ const ProjectDetailPage: React.FC = () => {
                       </h2>
                       {isUserOwner && (
                           <button
-                              onClick={() => setIsAddingUser(!isAddingUser)}
+                              onClick={() => {
+                                  setError('');
+                                  setIsMemberModalOpen(true);
+                              }}
                               className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                           >
-                              {isAddingUser ? 'Cancel' : 'Add User'}
+                              Add Member
                           </button>
                       )}
                   </div>
-
-                  {isAddingUser && isUserOwner && (
-                      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-6">
-                          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Add User to
-                              Project</h3>
-                          <div className="flex space-x-4">
-                              <select
-                                  value={selectedUserId}
-                                  onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : '')}
-                                  className="flex-grow px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                              >
-                                  <option value="">Select a user</option>
-                                  {availableUsers.map(user => (
-                                      <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
-                                  ))}
-                              </select>
-                              <button
-                                  onClick={handleAddUser}
-                                  disabled={selectedUserId === ''}
-                                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                              >
-                                  Add
-                              </button>
-                          </div>
-                          {availableUsers.length === 0 && (
-                              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                                  No more users available to add to this project.
-                              </p>
-                          )}
-                      </div>
-                  )}
 
                   <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
                       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -732,6 +704,84 @@ const ProjectDetailPage: React.FC = () => {
                 }
             }}
         />
+
+        {/* Member Selection Modal */}
+        {isMemberModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Add Member to Project</h2>
+                        <button
+                            onClick={() => {
+                                setError('');
+                                setIsMemberModalOpen(false);
+                            }}
+                            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+                            aria-label="Close"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                 stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    {error && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="mb-4">
+                        <label htmlFor="memberSelect"
+                               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Select User
+                        </label>
+                        <select
+                            id="memberSelect"
+                            value={selectedUserId}
+                            onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : '')}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        >
+                            <option value="">Select a user</option>
+                            {availableUsers.map(user => (
+                                <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                            ))}
+                        </select>
+                        {availableUsers.length === 0 && (
+                            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                                No more users available to add to this project.
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="flex justify-end space-x-3 mt-6">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setError('');
+                                setIsMemberModalOpen(false);
+                            }}
+                            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                handleAddUser();
+                                setIsMemberModalOpen(false);
+                            }}
+                            disabled={selectedUserId === ''}
+                            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                        >
+                            Add Member
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
     </Layout>
   );
 };
