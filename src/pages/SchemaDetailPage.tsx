@@ -295,13 +295,13 @@ const SchemaDetailPage: React.FC = () => {
       <div>
         <div className="mb-6">
           <Link
-            to={`/projects/${projectId}`}
+              to={schema?.resource ? `/projects/${projectId}/resources/${encodeURIComponent(schema.resource)}` : `/projects/${projectId}`}
             className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back to Project
+            {schema?.resource ? `Back to ${schema.resource} Resource` : 'Back to Project'}
           </Link>
         </div>
 
@@ -441,7 +441,8 @@ const SchemaDetailPage: React.FC = () => {
                 </div>
 
                 {testResult && (
-                  <div className={`mt-4 p-4 rounded-md ${testResult.success ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+                    <div
+                        className={`mt-4 p-4 rounded-md ${testResult.success ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'}`}>
                     <div className="flex items-center mb-2">
                       {testResult.success ? (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
@@ -464,47 +465,108 @@ const SchemaDetailPage: React.FC = () => {
                     {testResult.validationResult && !testResult.validationResult.isValid && testResult.validationResult.errors.length > 0 && (
                       <div className="mt-3">
                           <div className="flex justify-between items-center mb-2">
-                              <h4 className="font-semibold">Validation Errors:</h4>
+                            <h4 className="font-semibold text-lg">Validation Errors</h4>
                               <button
                                   onClick={handleGenerateAiSuggestions}
                                   disabled={isGeneratingAiSuggestion}
-                                  className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
+                                  className="px-4 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 flex items-center"
                               >
-                                {isGeneratingAiSuggestion ? 'Generating...' : 'Explain with AI'}
+                                {isGeneratingAiSuggestion ? (
+                                    <>
+                                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                                           xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                                strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor"
+                                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                      Generating...
+                                    </>
+                                ) : (
+                                    <>
+                                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor"
+                                           viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                                              d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                      </svg>
+                                      Explain with AI
+                                    </>
+                                )}
                               </button>
                           </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="md:col-span-1">
-                            <div className="max-h-60 overflow-y-auto pr-2">
-                              <ul className="list-disc pl-5 space-y-1 text-sm">
-                                {testResult.validationResult.errors.map((error, index) => (
-                                    <li key={index}>
-                                      <span
-                                          className="font-medium">{error.path.length > 0 ? error.path.join('.') : 'root'}:</span> {error.message}
-                                    </li>
-                                ))}
-                              </ul>
+                            <div
+                                className="bg-red-50/70 dark:bg-red-900/10 border border-red-100 dark:border-red-800/50 rounded-md p-4">
+                              <div className="max-h-60 overflow-y-auto pr-2">
+                                <ul className="list-disc pl-5 space-y-2 text-sm">
+                                  {testResult.validationResult.errors.map((error, index) => (
+                                      <li key={index}
+                                          className="pb-2 border-b border-red-50 dark:border-red-800/30 last:border-0">
+                                        <span className="font-medium text-red-600/80 dark:text-red-300/90">
+                                          {error.path.length > 0 ? error.path.join('.') : 'root'}:
+                                        </span>
+                                        <span className="text-red-500/90 dark:text-red-400/80">{error.message}</span>
+                                      </li>
+                                  ))}
+                                </ul>
+                              </div>
                             </div>
                           </div>
 
-                          {aiSuggestion && (
+                          {aiSuggestion ? (
                               <div className="md:col-span-1">
                                 <div
-                                    className={`p-3 rounded-md ${aiSuggestion.success ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
-                                  <h4 className="font-semibold mb-2">AI Suggestions:</h4>
+                                    className={`p-4 rounded-md ${aiSuggestion.success ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
+                                  <h4 className="font-semibold mb-2 flex items-center">
+                                    <svg className="w-5 h-5 mr-2 text-purple-600 dark:text-purple-400" fill="none"
+                                         stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                    </svg>
+                                    AI Suggestions
+                                  </h4>
                                   {aiSuggestion.success ? (
                                       <div
-                                          className="text-sm prose dark:prose-invert max-w-none max-h-60 overflow-y-auto">
+                                          className="text-sm prose dark:prose-invert max-w-none max-h-80 overflow-y-auto bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700">
                                         <ReactMarkdown>
                                           {aiSuggestion.suggestions}
                                         </ReactMarkdown>
                                       </div>
                                   ) : (
-                                      <div className="text-sm text-red-600 dark:text-red-400">
+                                      <div
+                                          className="text-sm text-red-600 dark:text-red-400 p-3 bg-red-50 dark:bg-red-900/10 rounded">
+                                        <svg className="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor"
+                                             viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
                                         {aiSuggestion.error}
                                       </div>
                                   )}
+                                </div>
+                              </div>
+                          ) : isGeneratingAiSuggestion && (
+                              <div className="md:col-span-1">
+                                <div
+                                    className="p-4 rounded-md bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                                  <div className="flex items-center justify-center h-40">
+                                    <div className="text-center">
+                                      <svg
+                                          className="animate-spin h-8 w-8 text-purple-600 dark:text-purple-400 mx-auto mb-2"
+                                          xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                                strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor"
+                                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                      <p className="text-purple-600 dark:text-purple-400">Generating AI
+                                        suggestions...</p>
+                                      <p className="text-xs text-purple-500 dark:text-purple-300 mt-1">This may take a
+                                        few seconds</p>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                           )}

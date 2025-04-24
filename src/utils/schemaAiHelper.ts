@@ -46,7 +46,7 @@ export const generateAiSuggestions = async (
         // Create a prompt that explains what we want
         const prompt = `
 You are a schema validation expert. I have a Zod schema and some data that failed validation against this schema.
-Please analyze the errors and provide suggestions on how to fix the data to make it valid according to the schema.
+Please analyze the errors and provide detailed, user-friendly explanations on how to fix the data to make it valid according to the schema.
 
 Schema definition:
 ${schemaDefinition}
@@ -57,8 +57,14 @@ ${JSON.stringify(data, null, 2)}
 Validation errors:
 ${formattedErrors}
 
-Please provide a clear explanation of what's wrong with the data and how to fix it to match the schema requirements.
-Focus on explaining which portions of the data are not aligned with the schema and suggest specific changes to make the data valid.
+Please provide:
+1. A clear, concise summary of what's wrong with the data
+2. Detailed explanations for each validation error, using simple language that non-technical users can understand
+3. Specific examples of how to fix each issue, showing both the incorrect data and the corrected version
+4. If applicable, explain any patterns or common mistakes that might be causing multiple errors
+5. Format your response using markdown for better readability (use headings, lists, code blocks, etc.)
+
+Focus on being helpful and educational, explaining not just what to fix but why the schema requires certain formats or values.
 `;
 
         // Call the Groq API

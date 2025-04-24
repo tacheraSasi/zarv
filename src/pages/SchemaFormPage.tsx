@@ -221,11 +221,7 @@ const SchemaFormPage: React.FC = () => {
         if (needsDatabaseUpgrade) {
           setError('Schema saved successfully, but version history could not be saved. Please reload the application to upgrade the database.');
         } else {
-          if (fromResourceDetail) {
-            navigate(`/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`);
-          } else {
             navigate(`/projects/${projectId}/schemas/${schemaId}`);
-          }
         }
       } else {
         // Create new schema
@@ -243,11 +239,7 @@ const SchemaFormPage: React.FC = () => {
         if (needsDatabaseUpgrade) {
           setError('Schema saved successfully, but version history could not be saved. Please reload the application to upgrade the database.');
         } else {
-          if (fromResourceDetail) {
-            navigate(`/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`);
-          } else {
             navigate(`/projects/${projectId}/schemas/${newSchemaId}`);
-          }
         }
       }
 
@@ -268,10 +260,7 @@ const SchemaFormPage: React.FC = () => {
 
           // Navigate to the appropriate page after a delay to show the message
           setTimeout(() => {
-            if (fromResourceDetail) {
-              // If coming from resource detail, navigate back there
-              navigate(`/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`);
-            } else if (isEditMode && schemaId) {
+              if (isEditMode && schemaId) {
               // If editing an existing schema, navigate to schema detail
               navigate(`/projects/${projectId}/schemas/${schemaId}`);
             } else {
@@ -303,15 +292,19 @@ const SchemaFormPage: React.FC = () => {
       <div>
         <div className="mb-6">
           <Link
-              to={fromResourceDetail
-                  ? `/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`
-                  : `/projects/${projectId}`}
+              to={isEditMode && schemaId
+                  ? `/projects/${projectId}/schemas/${schemaId}`
+                  : (fromResourceDetail
+                      ? `/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`
+                      : `/projects/${projectId}`)}
             className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            {fromResourceDetail ? `Back to ${resourceDetailName} Resource` : 'Back to Project'}
+              {isEditMode && schemaId
+                  ? 'Back to Schema Details'
+                  : (fromResourceDetail ? `Back to ${resourceDetailName} Resource` : 'Back to Project')}
           </Link>
         </div>
 
@@ -545,9 +538,11 @@ const SchemaFormPage: React.FC = () => {
 
             <div className="flex justify-end space-x-2">
               <Link
-                  to={fromResourceDetail
-                      ? `/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`
-                      : `/projects/${projectId}`}
+                  to={isEditMode && schemaId
+                      ? `/projects/${projectId}/schemas/${schemaId}`
+                      : (fromResourceDetail
+                          ? `/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`
+                          : `/projects/${projectId}`)}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Cancel
