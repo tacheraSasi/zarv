@@ -1,6 +1,8 @@
-# API Response Validator (ARV)
+# API Response Validator (ZARV)
 
-ARV is a web-based application designed to streamline the process of validating API responses against Zod schemas. It is particularly useful for backend developers who are working with frontend applications that rely on Zod for API response validation, or for those whose backend does not natively support Zod validation.
+ZARV is a web-based application designed to streamline the process of validating API responses against Zod schemas. It
+is particularly useful for backend developers who are working with frontend applications that rely on Zod for API
+response validation, or for those whose backend does not natively support Zod validation.
 
 ## Features
 
