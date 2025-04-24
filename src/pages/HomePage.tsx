@@ -1,7 +1,7 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import {Link} from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useAuth } from '../contexts/AuthContext';
+import {useAuth} from '../contexts/AuthContext';
 
 const HomePage: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -35,16 +35,10 @@ const HomePage: React.FC = () => {
             </p>
             <div className="flex justify-center space-x-4">
               <Link
-                to="/register"
+                  to="/login"
                 className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 transition-colors"
               >
-                Create Account
-              </Link>
-              <Link
-                to="/login"
-                className="px-6 py-3 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 font-medium rounded-md border border-indigo-600 dark:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Login
+                Get Started
               </Link>
             </div>
           </div>
