@@ -1,13 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, {useEffect, useState} from 'react';
+import {Link, useNavigate, useParams} from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useAuth } from '../contexts/AuthContext';
-import { Project, Schema, SchemaVersion, User, projectOperations, projectUserOperations, schemaOperations, userOperations } from '../utils/db';
+import {useAuth} from '../contexts/AuthContext';
+import {
+  Project,
+  projectOperations,
+  projectUserOperations,
+  Schema,
+  schemaOperations,
+  SchemaVersion,
+  User
+} from '../utils/db';
 import SchemaEditor from '../components/SchemaEditor';
 import SchemaActions from '../components/SchemaActions';
 import SampleDataGenerator from '../components/SampleDataGenerator';
-import DiffViewer from '../components/diff';
-import { testSchema, SchemaTestResult } from '../utils/schemaTestService';
+import {SchemaTestResult, testSchema} from '../utils/schemaTestService';
+import {AiSuggestionResult, generateAiSuggestions} from '../utils/schemaAiHelper';
 
 const SchemaDetailPage: React.FC = () => {
   const { projectId, schemaId } = useParams<{ projectId: string; schemaId: string }>();
@@ -20,6 +28,8 @@ const SchemaDetailPage: React.FC = () => {
   const [creator, setCreator] = useState<User | null>(null);
   const [schemaVersions, setSchemaVersions] = useState<SchemaVersion[]>([]);
   const [requestBody, setRequestBody] = useState<string>('');
+    const [aiSuggestion, setAiSuggestion] = useState<AiSuggestionResult | null>(null);
+    const [isGeneratingAiSuggestion, setIsGeneratingAiSuggestion] = useState(false);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -149,6 +159,33 @@ const SchemaDetailPage: React.FC = () => {
     }
   };
 
+    const handleGenerateAiSuggestions = async () => {
+        if (!schema || !testResult || !testResult.validationResult || !testResult.data) {
+            return;
+        }
+
+        setIsGeneratingAiSuggestion(true);
+        setAiSuggestion(null);
+
+        try {
+            const result = await generateAiSuggestions(
+                schema.schemaDefinition,
+                testResult.validationResult.errors,
+                testResult.data
+            );
+
+            setAiSuggestion(result);
+        } catch (err) {
+            console.error('Error generating AI suggestions:', err);
+            setAiSuggestion({
+                success: false,
+                error: `Failed to generate AI suggestions: ${err instanceof Error ? err.message : String(err)}`
+            });
+        } finally {
+            setIsGeneratingAiSuggestion(false);
+        }
+    };
+
   const handleTestSchema = async () => {
     if (!schema?.endpointUrl) {
       setTestResult({
@@ -191,8 +228,8 @@ const SchemaDetailPage: React.FC = () => {
       setTestResult(result);
 
       // Save the request body to the schema if it's not empty and the schema supports it
-      if (schema.id && currentUser?.id && schema.httpMethod && 
-          ['POST', 'PUT', 'PATCH'].includes(schema.httpMethod) && 
+        if (schema.id && currentUser?.id && schema.httpMethod &&
+            ['POST', 'PUT', 'PATCH'].includes(schema.httpMethod) &&
           requestBody.trim()) {
         try {
           await schemaOperations.update(schema.id, {
@@ -425,7 +462,16 @@ const SchemaDetailPage: React.FC = () => {
 
                     {testResult.validationResult && !testResult.validationResult.isValid && testResult.validationResult.errors.length > 0 && (
                       <div className="mt-3">
-                        <h4 className="font-semibold mb-1">Validation Errors:</h4>
+                          <div className="flex justify-between items-center mb-2">
+                              <h4 className="font-semibold">Validation Errors:</h4>
+                              <button
+                                  onClick={handleGenerateAiSuggestions}
+                                  disabled={isGeneratingAiSuggestion}
+                                  className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
+                              >
+                                  {isGeneratingAiSuggestion ? 'Generating...' : 'Get AI Suggestions'}
+                              </button>
+                          </div>
                         <ul className="list-disc pl-5 space-y-1 text-sm">
                           {testResult.validationResult.errors.map((error, index) => (
                             <li key={index}>
@@ -433,6 +479,22 @@ const SchemaDetailPage: React.FC = () => {
                             </li>
                           ))}
                         </ul>
+
+                          {aiSuggestion && (
+                              <div
+                                  className={`mt-4 p-3 rounded-md ${aiSuggestion.success ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
+                                  <h4 className="font-semibold mb-2">AI Suggestions:</h4>
+                                  {aiSuggestion.success ? (
+                                      <div className="text-sm whitespace-pre-line">
+                                          {aiSuggestion.suggestions}
+                                      </div>
+                                  ) : (
+                                      <div className="text-sm text-red-600 dark:text-red-400">
+                                          {aiSuggestion.error}
+                                      </div>
+                                  )}
+                              </div>
+                          )}
                       </div>
                     )}
 
