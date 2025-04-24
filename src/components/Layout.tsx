@@ -1,7 +1,7 @@
-import React, { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import React, {ReactNode} from 'react';
+import {Link} from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
-import { useAuth } from '../contexts/AuthContext';
+import {useAuth} from '../contexts/AuthContext';
 
 interface LayoutProps {
   children: ReactNode;
@@ -22,12 +22,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </Link>
               </div>
               <nav className="ml-6 flex items-center space-x-4">
-                <Link
-                  to="/projects"
-                  className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  Projects
-                </Link>
+                  {isAuthenticated && (
+                      <Link
+                          to="/projects"
+                          className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                          Projects
+                      </Link>
+                  )}
                 {isAuthenticated && isAdmin && (
                   <Link
                     to="/users"
