@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import React, {useEffect, useState} from 'react';
+import {Navigate} from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useAuth } from '../contexts/AuthContext';
-import { User, userOperations } from '../utils/db';
+import {useAuth} from '../contexts/AuthContext';
+import {User, userOperations} from '../utils/db';
 
 const UserManagementPage: React.FC = () => {
   const { isAdmin, currentUser, inviteUser, updateUser, deleteUser } = useAuth();
@@ -28,6 +28,7 @@ const UserManagementPage: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
   // Redirect if not admin
   if (!isAdmin) {
@@ -158,11 +159,12 @@ const UserManagementPage: React.FC = () => {
 
       if (result.success) {
         setSuccess(`User ${name} (${email}) has been invited successfully.`);
-        // Clear form
+        // Clear form and close modal
         setEmail('');
         setName('');
         setPosition('frontend');
         setPassword('');
+        setIsInviteModalOpen(false);
       } else {
         setError(result.error || 'Failed to invite user');
       }
@@ -179,93 +181,32 @@ const UserManagementPage: React.FC = () => {
       <div className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">User Management</h1>
 
-        {/* Invite User Form */}
+        {/* User Management Header */}
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Invite New User</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">User Management</h2>
+            <button
+                onClick={() => {
+                  setError('');
+                  setIsInviteModalOpen(true);
+                }}
+                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              Invite New User
+            </button>
+          </div>
 
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mt-4">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mt-4">
               {success}
             </div>
           )}
-
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Name
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="position" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Position
-                </label>
-                <select
-                  id="position"
-                  value={position}
-                  onChange={(e) => setPosition(e.target.value as 'frontend' | 'backend')}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                  required
-                >
-                  <option value="frontend">Frontend</option>
-                  <option value="backend">Backend</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Initial Password (optional)
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="Leave empty to generate random password"
-                />
-              </div>
-            </div>
-
-            <div>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full md:w-auto py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-              >
-                {isSubmitting ? 'Inviting User...' : 'Invite User'}
-              </button>
-            </div>
-          </form>
         </div>
 
         {/* User List */}
@@ -457,6 +398,120 @@ const UserManagementPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Invite User Modal */}
+      {isInviteModalOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Invite New User</h2>
+                <button
+                    onClick={() => {
+                      setError('');
+                      setIsInviteModalOpen(false);
+                    }}
+                    className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+                    aria-label="Close"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                       stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+
+              {error && (
+                  <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                    {error}
+                  </div>
+              )}
+
+              <form onSubmit={handleSubmit}>
+                <div className="grid grid-cols-1 gap-4 mb-4">
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Name
+                    </label>
+                    <input
+                        id="name"
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Email
+                    </label>
+                    <input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="position"
+                           className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Position
+                    </label>
+                    <select
+                        id="position"
+                        value={position}
+                        onChange={(e) => setPosition(e.target.value as 'frontend' | 'backend')}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        required
+                    >
+                      <option value="frontend">Frontend</option>
+                      <option value="backend">Backend</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="password"
+                           className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Initial Password (optional)
+                    </label>
+                    <input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        placeholder="Leave empty to generate random password"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                      type="button"
+                      onClick={() => {
+                        setError('');
+                        setIsInviteModalOpen(false);
+                      }}
+                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Inviting User...' : 'Invite User'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
       )}
     </Layout>
   );
