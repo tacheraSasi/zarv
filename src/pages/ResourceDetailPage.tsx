@@ -12,6 +12,7 @@ import {
     schemaOperations
 } from '../utils/db';
 import ResourceModal from '../components/ResourceModal';
+import Button from '../components/Button';
 
 const ResourceDetailPage: React.FC = () => {
     const {projectId, resourceName} = useParams<{ projectId: string; resourceName: string }>();
@@ -227,25 +228,29 @@ const ResourceDetailPage: React.FC = () => {
                             <div className="flex space-x-2">
                                 {decodedResourceName !== 'Uncategorized' && (
                                     <>
-                                        <button
+                                        <Button
                                             onClick={handleEditResource}
-                                            className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                            variant="secondary"
+                                            className="py-1 px-3 text-sm"
                                         >
                                             Edit Resource
-                                        </button>
-                                        <button
+                                        </Button>
+                                        <Button
                                             onClick={handleDeleteResource}
-                                            className="px-3 py-1 border border-red-300 dark:border-red-600 rounded-md text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900"
+                                            variant="danger"
+                                            className="py-1 px-3 text-sm"
                                         >
                                             Delete Resource
-                                        </button>
+                                        </Button>
                                     </>
                                 )}
                                 <Link
                                     to={`/projects/${projectId}/schemas/new?resource=${encodeURIComponent(decodedResourceName)}`}
-                                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                    className="inline-block"
                                 >
-                                    Add Schema
+                                    <Button variant="primary">
+                                        Add Schema
+                                    </Button>
                                 </Link>
                             </div>
                         </div>
@@ -298,12 +303,13 @@ const ResourceDetailPage: React.FC = () => {
                                 >
                                     View Details
                                 </Link>
-                                <button
+                                <Button
                                     onClick={() => schema.id && handleDeleteSchema(schema.id)}
-                                    className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium"
+                                    variant="danger"
+                                    className="py-1 px-2 text-sm"
                                 >
                                     Delete
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     ))}
@@ -314,9 +320,11 @@ const ResourceDetailPage: React.FC = () => {
                         <p className="text-gray-600 dark:text-gray-400 mb-4">No schemas found for this resource.</p>
                         <Link
                             to={`/projects/${projectId}/schemas/new?resource=${encodeURIComponent(decodedResourceName)}`}
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            className="inline-block"
                         >
-                            Create New Schema
+                            <Button variant="primary">
+                                Create New Schema
+                            </Button>
                         </Link>
                     </div>
                 )}

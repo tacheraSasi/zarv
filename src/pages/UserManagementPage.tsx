@@ -178,7 +178,7 @@ const UserManagementPage: React.FC = () => {
 
   return (
     <Layout>
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">User Management</h1>
 
         {/* User Management Header */}

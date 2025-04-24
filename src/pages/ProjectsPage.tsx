@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, {useEffect, useState} from 'react';
+import {Link, useNavigate} from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useAuth } from '../contexts/AuthContext';
-import { Project, projectOperations, projectUserOperations } from '../utils/db';
+import {useAuth} from '../contexts/AuthContext';
+import {Project, projectOperations, projectUserOperations} from '../utils/db';
+import Button from '../components/Button';
 
 const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -124,12 +125,12 @@ const ProjectsPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Your Projects
           </h1>
-          <button
+            <Button
             onClick={() => setShowCreateForm(!showCreateForm)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            variant="primary"
           >
             {showCreateForm ? 'Cancel' : 'Create Project'}
-          </button>
+            </Button>
         </div>
 
         {error && (
@@ -168,12 +169,12 @@ const ProjectsPage: React.FC = () => {
                 />
               </div>
               <div className="flex justify-end">
-                <button
+                  <Button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  variant="primary"
                 >
                   Create
-                </button>
+                  </Button>
               </div>
             </form>
           </div>
@@ -186,12 +187,12 @@ const ProjectsPage: React.FC = () => {
         ) : projects.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8 text-center">
             <p className="text-gray-600 dark:text-gray-400 mb-4">You don't have any projects yet.</p>
-            <button
+              <Button
               onClick={() => setShowCreateForm(true)}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              variant="primary"
             >
               Create Your First Project
-            </button>
+              </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -218,12 +219,13 @@ const ProjectsPage: React.FC = () => {
                     View Details
                   </Link>
                   {project.id && ownedProjectIds.includes(project.id) && (
-                    <button
+                      <Button
                       onClick={() => project.id && handleDeleteProject(project.id)}
-                      className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium"
+                      variant="danger"
+                      className="text-sm py-1 px-2"
                     >
                       Delete
-                    </button>
+                      </Button>
                   )}
                 </div>
               </div>

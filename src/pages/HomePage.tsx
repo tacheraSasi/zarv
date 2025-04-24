@@ -8,7 +8,7 @@ const HomePage: React.FC = () => {
 
   return (
     <Layout>
-      <div className="text-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div>
         {/* Hero Section */}
         <div
             className="py-12 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-3xl shadow-xl mb-16 relative overflow-hidden">
