@@ -17,6 +17,8 @@ import SampleDataGenerator from '../components/SampleDataGenerator';
 import {SchemaTestResult, testSchema} from '../utils/schemaTestService';
 import {AiSuggestionResult, generateAiSuggestions} from '../utils/schemaAiHelper';
 import ReactMarkdown from 'react-markdown';
+import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
+import {vscDarkPlus} from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 const SchemaDetailPage: React.FC = () => {
   const { projectId, schemaId } = useParams<{ projectId: string; schemaId: string }>();
@@ -166,15 +168,29 @@ const SchemaDetailPage: React.FC = () => {
         }
 
         setIsGeneratingAiSuggestion(true);
-        setAiSuggestion(null);
+      setAiSuggestion({
+        success: true,
+        suggestions: '',
+        isStreaming: true
+      });
 
         try {
+          // Use streaming API with callback
             const result = await generateAiSuggestions(
                 schema.schemaDefinition,
                 testResult.validationResult.errors,
-                testResult.data
+                testResult.data,
+                (partialResponse) => {
+                  // Update the AI suggestion with the partial response
+                  setAiSuggestion({
+                    success: true,
+                    suggestions: partialResponse,
+                    isStreaming: true
+                  });
+                }
             );
 
+          // Set the final result
             setAiSuggestion(result);
         } catch (err) {
             console.error('Error generating AI suggestions:', err);
@@ -530,7 +546,43 @@ const SchemaDetailPage: React.FC = () => {
                                   {aiSuggestion.success ? (
                                       <div
                                           className="text-sm prose dark:prose-invert max-w-none max-h-80 overflow-y-auto bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700">
-                                        <ReactMarkdown>
+                                        <ReactMarkdown
+                                            components={{
+                                              // Add proper spacing between elements
+                                              h1: ({node, ...props}) => <h1
+                                                  className="mt-6 mb-4 text-xl font-bold" {...props} />,
+                                              h2: ({node, ...props}) => <h2
+                                                  className="mt-5 mb-3 text-lg font-bold" {...props} />,
+                                              h3: ({node, ...props}) => <h3
+                                                  className="mt-4 mb-2 text-md font-bold" {...props} />,
+                                              p: ({node, ...props}) => <p className="my-3" {...props} />,
+                                              ul: ({node, ...props}) => <ul
+                                                  className="my-3 ml-4 list-disc" {...props} />,
+                                              ol: ({node, ...props}) => <ol
+                                                  className="my-3 ml-4 list-decimal" {...props} />,
+                                              li: ({node, ...props}) => <li className="my-1" {...props} />,
+                                              // Render code blocks with syntax highlighting
+                                              code({node, inline, className, children, ...props}) {
+                                                const match = /language-(\w+)/.exec(className || '');
+                                                return !inline && match ? (
+                                                    <SyntaxHighlighter
+                                                        style={vscDarkPlus}
+                                                        language={match[1]}
+                                                        PreTag="div"
+                                                        className="rounded-md my-3"
+                                                        {...props}
+                                                    >
+                                                      {String(children).replace(/\n$/, '')}
+                                                    </SyntaxHighlighter>
+                                                ) : (
+                                                    <code
+                                                        className={`${className} bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded`} {...props}>
+                                                      {children}
+                                                    </code>
+                                                );
+                                              }
+                                            }}
+                                        >
                                           {aiSuggestion.suggestions}
                                         </ReactMarkdown>
                                       </div>

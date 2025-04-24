@@ -8,52 +8,59 @@ const HomePage: React.FC = () => {
 
   return (
     <Layout>
-      <div>
-        {/* Hero Section */}
-        <div
-            className="py-12 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-3xl shadow-xl mb-16 relative overflow-hidden">
-          <div className="absolute inset-0 bg-grid-white/[0.05] bg-[length:20px_20px]"></div>
-          <div className="relative z-10 px-6 py-16 sm:px-12 sm:py-24">
-            <h1 className="text-5xl font-extrabold text-white mb-6 tracking-tight text-center">
-              Welcome to <span className="text-yellow-300">ZARV</span>
+      <div className="relative">
+        {/* Animated background elements - positioned to be under all sections */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div
+              className="absolute top-1/4 left-1/4 w-32 h-32 bg-indigo-400 rounded-full opacity-10 blur-3xl animate-pulse"
+              style={{animationDuration: '8s'}}></div>
+          <div
+              className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-purple-400 rounded-full opacity-10 blur-3xl animate-pulse"
+              style={{animationDuration: '10s'}}></div>
+          <div
+              className="absolute top-1/2 right-1/3 w-24 h-24 bg-pink-400 rounded-full opacity-10 blur-3xl animate-pulse"
+              style={{animationDuration: '7s'}}></div>
+        </div>
+
+        {/* Hero Section - content directly on parent */}
+        <div className="py-12 mb-16 relative z-10 backdrop-blur-lg">
+
+          {/* Content */}
+          <div className="px-6 py-16 sm:px-12 sm:py-24 flex flex-col items-center justify-center relative z-10 ">
+            <h1 className="text-5xl font-extrabold text-gray-900 dark:text-white mb-6 tracking-tight text-center">
+              Welcome to <span className="text-indigo-600 dark:text-indigo-400">ZARV</span>
             </h1>
-            <p className="text-2xl text-white/90 mb-10 max-w-3xl mx-auto text-center leading-relaxed">
+            <p className="text-2xl text-gray-700 dark:text-gray-300 mb-10 max-w-3xl mx-auto text-center leading-relaxed">
               A powerful tool for managing, testing, and validating API schemas with advanced features
             </p>
 
             {isAuthenticated ? (
-                <div className="space-y-6">
-                  <p className="text-white/80 text-xl">
+                <div className="space-y-6 text-center">
+                  <p className="text-gray-600 dark:text-gray-400 text-xl">
                     You're logged in! Start managing your schemas.
                   </p>
                   <Link
                       to="/projects"
-                      className="inline-block px-8 py-4 bg-white text-indigo-600 font-bold rounded-xl hover:bg-yellow-100 transition-colors shadow-lg transform hover:scale-105 duration-200"
+                      className="inline-block px-8 py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg transform hover:scale-105 duration-200"
                   >
                     View Your Projects
                   </Link>
                 </div>
             ) : (
-                <div className="space-y-6">
-                  <p className="text-white/80 text-xl">
+                <div className="space-y-6 text-center">
+                  <p className="text-gray-600 dark:text-gray-400 text-xl">
                     Experience the next generation of API schema validation
                   </p>
                   <div className="flex justify-center space-x-4">
                     <Link
                         to="/login"
-                        className="inline-block px-8 py-4 bg-white text-indigo-600 font-bold rounded-xl hover:bg-yellow-100 transition-colors shadow-lg transform hover:scale-105 duration-200"
+                        className="inline-block px-8 py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg transform hover:scale-105 duration-200"
                     >
                       Get Started
                     </Link>
                   </div>
                 </div>
             )}
-
-            {/* Abstract shapes for decoration */}
-            <div
-                className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-purple-400 rounded-full opacity-20 blur-3xl"></div>
-            <div
-                className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-indigo-400 rounded-full opacity-20 blur-3xl"></div>
           </div>
         </div>
 
