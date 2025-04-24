@@ -1,8 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import React, {useEffect, useState} from 'react';
+import {Link, useLocation, useNavigate, useParams} from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useAuth } from '../contexts/AuthContext';
-import { Project, Schema, projectOperations, projectUserOperations, schemaOperations, resetDatabase } from '../utils/db';
+import {useAuth} from '../contexts/AuthContext';
+import {
+  Project,
+  projectOperations,
+  projectUserOperations,
+  resetDatabase,
+  Resource,
+  resourceOperations,
+  Schema,
+  schemaOperations
+} from '../utils/db';
 import SchemaEditor from '../components/SchemaEditor';
 import SchemaActions from '../components/SchemaActions';
 
@@ -15,10 +24,17 @@ const SchemaFormPage: React.FC = () => {
   const [description, setDescription] = useState('');
   const [endpointUrl, setEndpointUrl] = useState('');
   const [httpMethod, setHttpMethod] = useState('GET');
+  const [resource, setResource] = useState('');
+  const [resourceId, setResourceId] = useState<number | undefined>(undefined);
+  const [availableResources, setAvailableResources] = useState<Resource[]>([]);
+  const [isNewResource, setIsNewResource] = useState(false);
+  const [newResourceName, setNewResourceName] = useState('');
   const [schemaDefinition, setSchemaDefinition] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isResetting, setIsResetting] = useState(false);
+  const [fromResourceDetail, setFromResourceDetail] = useState(false);
+  const [resourceDetailName, setResourceDetailName] = useState('');
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -53,6 +69,32 @@ const SchemaFormPage: React.FC = () => {
 
         setProject(projectData);
 
+        // Load available resources for the project
+        try {
+          const resources = await resourceOperations.getByProjectId(parseInt(projectId));
+          setAvailableResources(resources);
+
+          // Check if resource is specified in URL query parameters
+          const searchParams = new URLSearchParams(location.search);
+          const resourceParam = searchParams.get('resource');
+
+          if (resourceParam) {
+            const decodedResourceName = decodeURIComponent(resourceParam);
+            setResource(decodedResourceName);
+            setResourceDetailName(decodedResourceName);
+            setFromResourceDetail(true);
+
+            // Find matching resource in available resources to set resourceId
+            const matchingResource = resources.find(r => r.name === decodedResourceName);
+            if (matchingResource && matchingResource.id) {
+              setResourceId(matchingResource.id);
+            }
+          }
+        } catch (resourceErr) {
+          console.error('Error loading resources:', resourceErr);
+          // Don't fail the whole operation if resources can't be loaded
+        }
+
         // If editing an existing schema, load it
         if (isEditMode && schemaId) {
           const schemaData = await schemaOperations.getById(parseInt(schemaId));
@@ -75,6 +117,8 @@ const SchemaFormPage: React.FC = () => {
           setDescription(schemaData.description || '');
           setEndpointUrl(schemaData.endpointUrl || '');
           setHttpMethod(schemaData.httpMethod || 'GET');
+          setResource(schemaData.resource || '');
+          setResourceId(schemaData.resourceId);
           setSchemaDefinition(schemaData.schemaDefinition);
         }
       } catch (err) {
@@ -169,13 +213,19 @@ const SchemaFormPage: React.FC = () => {
           description: description.trim() || undefined,
           endpointUrl: endpointUrl.trim() || undefined,
           httpMethod: httpMethod,
+           resource: fromResourceDetail ? resourceDetailName : (resource.trim() || undefined),
+           resourceId: fromResourceDetail ? resourceId : resourceId,
           schemaDefinition: schemaDefinition.trim()
         }, currentUser.id); // Pass the current user ID
 
         if (needsDatabaseUpgrade) {
           setError('Schema saved successfully, but version history could not be saved. Please reload the application to upgrade the database.');
         } else {
-          navigate(`/projects/${projectId}/schemas/${schemaId}`);
+          if (fromResourceDetail) {
+            navigate(`/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`);
+          } else {
+            navigate(`/projects/${projectId}/schemas/${schemaId}`);
+          }
         }
       } else {
         // Create new schema
@@ -186,13 +236,18 @@ const SchemaFormPage: React.FC = () => {
           description.trim() || undefined,
           endpointUrl.trim() || undefined,
           currentUser.id, // Pass the current user ID
-          httpMethod // Pass the HTTP method
+            httpMethod, // Pass the HTTP method
+            fromResourceDetail ? resourceDetailName : (resource.trim() || undefined) // Use resourceDetailName when coming from resource detail
         );
 
         if (needsDatabaseUpgrade) {
           setError('Schema saved successfully, but version history could not be saved. Please reload the application to upgrade the database.');
         } else {
-          navigate(`/projects/${projectId}/schemas/${newSchemaId}`);
+          if (fromResourceDetail) {
+            navigate(`/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`);
+          } else {
+            navigate(`/projects/${projectId}/schemas/${newSchemaId}`);
+          }
         }
       }
 
@@ -211,9 +266,13 @@ const SchemaFormPage: React.FC = () => {
                   'This typically happens with very large schemas. The schema functionality will work normally, ' +
                   'but version history may be limited or unavailable for this schema.');
 
-          // Navigate to the schema detail page after a delay to show the message
+          // Navigate to the appropriate page after a delay to show the message
           setTimeout(() => {
-            if (isEditMode && schemaId) {
+            if (fromResourceDetail) {
+              // If coming from resource detail, navigate back there
+              navigate(`/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`);
+            } else if (isEditMode && schemaId) {
+              // If editing an existing schema, navigate to schema detail
               navigate(`/projects/${projectId}/schemas/${schemaId}`);
             } else {
               // For new schemas, we don't have the ID, so navigate back to the project
@@ -244,13 +303,15 @@ const SchemaFormPage: React.FC = () => {
       <div>
         <div className="mb-6">
           <Link
-            to={`/projects/${projectId}`}
+              to={fromResourceDetail
+                  ? `/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`
+                  : `/projects/${projectId}`}
             className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back to Project
+            {fromResourceDetail ? `Back to ${resourceDetailName} Resource` : 'Back to Project'}
           </Link>
         </div>
 
@@ -354,6 +415,116 @@ const SchemaFormPage: React.FC = () => {
               </select>
             </div>
 
+            {!fromResourceDetail && (
+                <div className="mb-4">
+                  <label htmlFor="resource" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Resource
+                  </label>
+                  {isNewResource ? (
+                      <div className="space-y-2">
+                        <input
+                            id="newResource"
+                            type="text"
+                            value={newResourceName}
+                            onChange={(e) => setNewResourceName(e.target.value)}
+                            placeholder="Enter new resource name"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        />
+                        <div className="flex space-x-2">
+                          <button
+                              type="button"
+                              onClick={async () => {
+                                if (newResourceName.trim() && projectId) {
+                                  try {
+                                    // Create the resource in the database
+                                    const newResourceId = await resourceOperations.create(
+                                        parseInt(projectId),
+                                        newResourceName.trim()
+                                    );
+
+                                    // Update state with the new resource
+                                    setResource(newResourceName.trim());
+                                    setResourceId(newResourceId);
+
+                                    // Add to available resources
+                                    const newResource: Resource = {
+                                      id: newResourceId,
+                                      projectId: parseInt(projectId),
+                                      name: newResourceName.trim(),
+                                      createdAt: new Date(),
+                                      updatedAt: new Date()
+                                    };
+                                    setAvailableResources([...availableResources, newResource]);
+
+                                    // Close the new resource form
+                                    setIsNewResource(false);
+                                  } catch (err) {
+                                    console.error('Error creating resource:', err);
+                                    setError(`Failed to create resource: ${err instanceof Error ? err.message : String(err)}`);
+                                  }
+                                }
+                              }}
+                              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                          >
+                            Save
+                          </button>
+                          <button
+                              type="button"
+                              onClick={() => {
+                                setIsNewResource(false);
+                                setNewResourceName('');
+                              }}
+                              className="px-3 py-1 bg-gray-300 text-gray-700 dark:bg-gray-600 dark:text-gray-200 text-sm rounded hover:bg-gray-400 dark:hover:bg-gray-500"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                  ) : (
+                      <div className="space-y-2">
+                        <select
+                            id="resource"
+                            value={resourceId ? resourceId.toString() : ""}
+                            onChange={(e) => {
+                              const selectedId = e.target.value ? parseInt(e.target.value) : undefined;
+                              setResourceId(selectedId);
+                              // Also set the resource name for backward compatibility
+                              if (selectedId) {
+                                const selectedResource = availableResources.find(r => r.id === selectedId);
+                                if (selectedResource) {
+                                  setResource(selectedResource.name);
+                                }
+                              } else {
+                                setResource("");
+                              }
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        >
+                          <option value="">Select a resource</option>
+                          {availableResources.map((res) => (
+                              <option key={res.id} value={res.id?.toString()}>
+                                {res.name}
+                              </option>
+                          ))}
+                        </select>
+                        <button
+                            type="button"
+                            onClick={() => {
+                              setIsNewResource(true);
+                              setNewResourceName('');
+                            }}
+                            className="px-3 py-1 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
+                        >
+                          Add New Resource
+                        </button>
+                      </div>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Group schemas by resource type (e.g., users, roles, products)
+                  </p>
+                </div>
+            )}
+
             <div className="mb-6">
               <label htmlFor="schemaDefinition" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Schema Definition
@@ -374,7 +545,9 @@ const SchemaFormPage: React.FC = () => {
 
             <div className="flex justify-end space-x-2">
               <Link
-                to={`/projects/${projectId}`}
+                  to={fromResourceDetail
+                      ? `/projects/${projectId}/resources/${encodeURIComponent(resourceDetailName)}`
+                      : `/projects/${projectId}`}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Cancel

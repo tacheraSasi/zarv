@@ -354,7 +354,7 @@ const SchemaDetailPage: React.FC = () => {
                   </div>
                   <div className="flex space-x-2">
                     <Link
-                      to={`/projects/${projectId}/schemas/${schemaId}/edit`}
+                        to={`/projects/${projectId}/schemas/${schemaId}/edit${schema.resource ? `?resource=${encodeURIComponent(schema.resource)}` : ''}`}
                       className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
                     >
                       Edit

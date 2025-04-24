@@ -13,6 +13,14 @@ export interface User {
   updatedAt: Date;
 }
 
+export interface Resource {
+  id?: number;
+  projectId: number;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Project {
   id?: number;
   ownerId: number;  // The creator/owner of the project
@@ -40,6 +48,8 @@ export interface Schema {
   schemaDefinition: string;
   httpMethod?: string;  // HTTP method (GET, POST, PUT, PATCH, DELETE)
   lastRequestBody?: string;  // Last JSON data used for testing the schema
+  resource?: string;  // Resource category for grouping schemas (legacy)
+  resourceId?: number;  // Reference to the resource in the resources store
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +65,8 @@ export interface SchemaVersion {
   endpointUrl?: string;  // Schema endpoint URL at this point in time
   httpMethod?: string;  // HTTP method at this point in time
   lastRequestBody?: string;  // Last JSON data used for testing the schema
+  resource?: string;  // Resource category for grouping schemas (legacy)
+  resourceId?: number;  // Reference to the resource in the resources store
   changeDescription?: string;  // Description of what was changed
 }
 
@@ -71,7 +83,7 @@ export interface ApiHeader {
 
 // Database name and version
 const DB_NAME = 'SchemaManagerDatabase';
-const DB_VERSION = 7; // Increased to handle lastRequestBody in schemas
+const DB_VERSION = 9; // Increased to handle resources as a separate store
 
 // Store names
 const STORES = {
@@ -80,7 +92,8 @@ const STORES = {
   PROJECT_USERS: 'projectUsers',
   SCHEMAS: 'schemas',
   SCHEMA_VERSIONS: 'schemaVersions',
-  API_HEADERS: 'apiHeaders'
+  API_HEADERS: 'apiHeaders',
+  RESOURCES: 'resources'
 };
 
 // Database connection
@@ -212,6 +225,29 @@ const initDatabase = (): Promise<IDBDatabase> => {
         console.log('Upgrading database to version 7: Adding lastRequestBody field to schemas');
         // We can't directly modify the schema of existing objects in IndexedDB
         // The lastRequestBody field will be undefined for existing schemas until it's set
+      }
+
+      // Add resource field to existing schemas (new in version 8)
+      if (oldVersion < 8 && db.objectStoreNames.contains(STORES.SCHEMAS)) {
+        console.log('Upgrading database to version 8: Adding resource field to schemas');
+        // We can't directly modify the schema of existing objects in IndexedDB
+        // The resource field will be undefined for existing schemas until it's set
+
+        // Add resource index to schemas store
+        const schemasStore = transaction.objectStore(STORES.SCHEMAS);
+        if (!schemasStore.indexNames.contains('resource')) {
+          schemasStore.createIndex('resource', 'resource', {unique: false});
+        }
+      }
+
+      // Create resources store (new in version 9)
+      if (!db.objectStoreNames.contains(STORES.RESOURCES)) {
+        console.log('Upgrading database to version 9: Adding resources store');
+        const resourcesStore = db.createObjectStore(STORES.RESOURCES, {keyPath: 'id', autoIncrement: true});
+        resourcesStore.createIndex('projectId', 'projectId', {unique: false});
+        resourcesStore.createIndex('name', 'name', {unique: false});
+        // Composite index for project+name uniqueness
+        resourcesStore.createIndex('projectName', ['projectId', 'name'], {unique: true});
       }
     };
   });
@@ -826,8 +862,217 @@ export const projectUserOperations = {
   }
 };
 
+// CRUD operations for Resource
+export const resourceOperations = {
+  /**
+   * Creates a new resource for a project
+   * @param projectId ID of the project
+   * @param name Name of the resource
+   * @returns Promise resolving to the new resource's ID
+   */
+  async create(projectId: number, name: string): Promise<number> {
+    try {
+      const now = new Date();
+
+      // Check if a resource with this name already exists in the project
+      const existingResources = await this.getByProjectId(projectId);
+      const existingResource = existingResources.find(r => r.name.toLowerCase() === name.toLowerCase());
+
+      if (existingResource) {
+        return existingResource.id!; // Return existing resource ID if found
+      }
+
+      // Create the resource
+      return await performTransaction<number>(STORES.RESOURCES, 'readwrite', (store) => {
+        const resource: Resource = {
+          projectId,
+          name,
+          createdAt: now,
+          updatedAt: now
+        };
+        return store.add(resource);
+      });
+    } catch (error) {
+      console.error('Error in create resource:', error);
+      throw new Error(`Database error while creating resource: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Retrieves a resource by its ID
+   * @param id Resource ID to retrieve
+   * @returns Promise resolving to the resource if found, undefined otherwise
+   */
+  async getById(id: number): Promise<Resource | undefined> {
+    try {
+      return await performTransaction<Resource | undefined>(STORES.RESOURCES, 'readonly', (store) => {
+        return store.get(id);
+      });
+    } catch (error) {
+      console.error('Error in getById resource:', error);
+      throw new Error(`Database error while retrieving resource: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets all resources for a project
+   * @param projectId ID of the project
+   * @returns Promise resolving to an array of resources
+   */
+  async getByProjectId(projectId: number): Promise<Resource[]> {
+    try {
+      const resources = await performTransaction<Resource[]>(STORES.RESOURCES, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      return resources.filter(resource => resource.projectId === projectId);
+    } catch (error) {
+      console.error('Error in getByProjectId resource:', error);
+      throw new Error(`Database error while retrieving resources by project ID: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Updates a resource with the given data
+   * @param id Resource ID to update
+   * @param data Partial resource data to update
+   * @returns Promise resolving when the update is complete
+   */
+  async update(id: number, data: Partial<Omit<Resource, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>>): Promise<void> {
+    try {
+      // First get the resource
+      const resource = await this.getById(id);
+      if (!resource) {
+        throw new Error(`Resource with ID ${id} not found`);
+      }
+
+      // Update the resource with new data
+      const updatedResource = {
+        ...resource,
+        ...data,
+        updatedAt: new Date()
+      };
+
+      // Put the updated resource back in the store
+      await performTransaction<IDBValidKey>(STORES.RESOURCES, 'readwrite', (store) => {
+        return store.put(updatedResource);
+      });
+    } catch (error) {
+      console.error('Error in update resource:', error);
+      throw new Error(`Database error while updating resource: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Deletes a resource by its ID
+   * @param id Resource ID to delete
+   * @returns Promise resolving when the deletion is complete
+   */
+  async delete(id: number): Promise<void> {
+    try {
+      // Check if resource exists
+      const resource = await this.getById(id);
+      if (!resource) {
+        throw new Error(`Resource with ID ${id} not found`);
+      }
+
+      // Get all schemas that reference this resource
+      const schemas = await schemaOperations.getByResourceId(id);
+
+      // Update schemas to remove the resource reference
+      for (const schema of schemas) {
+        if (schema.id) {
+          await schemaOperations.update(schema.id, {
+            resourceId: undefined,
+            resource: undefined
+          });
+        }
+      }
+
+      // Delete the resource
+      await performTransaction<undefined>(STORES.RESOURCES, 'readwrite', (store) => {
+        return store.delete(id);
+      });
+    } catch (error) {
+      console.error('Error in delete resource:', error);
+      throw new Error(`Database error while deleting resource: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets or creates a resource by name for a project
+   * @param projectId ID of the project
+   * @param name Name of the resource
+   * @returns Promise resolving to the resource ID
+   */
+  async getOrCreate(projectId: number, name: string): Promise<number> {
+    try {
+      if (!name) {
+        return 0; // Return 0 for empty resource names
+      }
+
+      const resources = await this.getByProjectId(projectId);
+      const existingResource = resources.find(r => r.name.toLowerCase() === name.toLowerCase());
+
+      if (existingResource) {
+        return existingResource.id!;
+      }
+
+      return await this.create(projectId, name);
+    } catch (error) {
+      console.error('Error in getOrCreate resource:', error);
+      throw new Error(`Database error while getting or creating resource: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+};
+
 // CRUD operations for Schema
 export const schemaOperations = {
+  /**
+   * Gets all unique resources for a project
+   * @param projectId ID of the project
+   * @returns Promise resolving to an array of unique resource names
+   * @deprecated Use resourceOperations.getByProjectId instead
+   */
+  async getResourcesByProjectId(projectId: number): Promise<string[]> {
+    try {
+      const schemas = await this.getByProjectId(projectId);
+
+      // Extract unique resources
+      const resourceSet = new Set<string>();
+
+      schemas.forEach(schema => {
+        if (schema.resource) {
+          resourceSet.add(schema.resource);
+        }
+      });
+
+      // Convert Set to Array and sort alphabetically
+      return Array.from(resourceSet).sort();
+    } catch (error) {
+      console.error('Error in getResourcesByProjectId:', error);
+      throw new Error(`Database error while retrieving resources by project ID: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
+  /**
+   * Gets all schemas that reference a specific resource
+   * @param resourceId ID of the resource
+   * @returns Promise resolving to an array of schemas
+   */
+  async getByResourceId(resourceId: number): Promise<Schema[]> {
+    try {
+      const schemas = await performTransaction<Schema[]>(STORES.SCHEMAS, 'readonly', (store) => {
+        return store.getAll();
+      });
+
+      return schemas.filter(schema => schema.resourceId === resourceId);
+    } catch (error) {
+      console.error('Error in getByResourceId:', error);
+      throw new Error(`Database error while retrieving schemas by resource ID: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+
   async create(
     projectId: number,
     name: string,
@@ -835,7 +1080,8 @@ export const schemaOperations = {
     description?: string,
     endpointUrl?: string,
     creatorId?: number,
-    httpMethod: string = 'GET'
+    httpMethod: string = 'GET',
+    resource?: string
   ): Promise<number> {
     try {
       const now = new Date();
@@ -843,6 +1089,17 @@ export const schemaOperations = {
       // If creatorId is not provided, try to get the current user ID
       if (!creatorId) {
         console.warn('Schema created without specifying a creator ID');
+      }
+
+      // Get or create resource if provided
+      let resourceId: number | undefined = undefined;
+      if (resource) {
+        try {
+          resourceId = await resourceOperations.getOrCreate(projectId, resource);
+        } catch (resourceError) {
+          console.error('Error getting or creating resource:', resourceError);
+          // Continue with creation even if resource handling fails
+        }
       }
 
       const schemaId = await performTransaction<number>(STORES.SCHEMAS, 'readwrite', (store) => {
@@ -855,6 +1112,8 @@ export const schemaOperations = {
           schemaDefinition: encryptData(schemaDefinition), // Encrypt schema definition
           httpMethod,
           lastRequestBody: undefined, // Initialize as undefined
+          resource, // Keep legacy resource field for backward compatibility
+          resourceId, // Add resourceId field
           createdAt: now,
           updatedAt: now
         };
@@ -870,7 +1129,9 @@ export const schemaOperations = {
             description,
             endpointUrl,
             httpMethod,
-            lastRequestBody: undefined
+            lastRequestBody: undefined,
+            resource,
+            resourceId
           }, 'Initial version');
         } catch (versionError) {
           // Log the error but don't fail the schema creation
@@ -941,6 +1202,22 @@ export const schemaOperations = {
         updateData.schemaDefinition = encryptData(updateData.schemaDefinition);
       }
 
+      // Handle resource update - get or create resource if provided
+      if (updateData.resource !== undefined) {
+        try {
+          // If resource is empty, set resourceId to undefined
+          if (!updateData.resource) {
+            updateData.resourceId = undefined;
+          } else {
+            // Get or create the resource
+            updateData.resourceId = await resourceOperations.getOrCreate(schema.projectId, updateData.resource);
+          }
+        } catch (resourceError) {
+          console.error('Error getting or creating resource during schema update:', resourceError);
+          // Continue with update even if resource handling fails
+        }
+      }
+
       // Update the schema with new data
       const updatedSchema = {
         ...schema,
@@ -966,6 +1243,7 @@ export const schemaOperations = {
           if (data.schemaDefinition) changes.push('schema definition');
           if (data.httpMethod) changes.push('HTTP method');
           if (data.lastRequestBody) changes.push('last request body');
+          if (data.resource || data.resourceId !== undefined) changes.push('resource');
 
           const changeDescription = `Updated ${changes.join(', ')}`;
 
@@ -976,7 +1254,9 @@ export const schemaOperations = {
             description: data.description !== undefined ? data.description : schema.description,
             endpointUrl: data.endpointUrl !== undefined ? data.endpointUrl : schema.endpointUrl,
             httpMethod: data.httpMethod !== undefined ? data.httpMethod : schema.httpMethod,
-            lastRequestBody: data.lastRequestBody !== undefined ? data.lastRequestBody : schema.lastRequestBody
+            lastRequestBody: data.lastRequestBody !== undefined ? data.lastRequestBody : schema.lastRequestBody,
+            resource: data.resource !== undefined ? data.resource : schema.resource,
+            resourceId: data.resourceId !== undefined ? data.resourceId : schema.resourceId
           }, changeDescription);
         } catch (versionError) {
           // Log the error but don't fail the schema update
@@ -1011,7 +1291,9 @@ export const schemaOperations = {
               description: schema.description,
               endpointUrl: schema.endpointUrl,
               httpMethod: schema.httpMethod,
-              lastRequestBody: schema.lastRequestBody
+              lastRequestBody: schema.lastRequestBody,
+              resource: schema.resource,
+              resourceId: schema.resourceId
             }, 'Schema deleted');
           }
         } catch (versionError) {
@@ -1059,6 +1341,8 @@ export const schemaOperations = {
       endpointUrl?: string;
       httpMethod?: string;
       lastRequestBody?: string;
+      resource?: string;
+      resourceId?: number;
     },
     changeDescription?: string
   ): Promise<number> {
@@ -1102,6 +1386,8 @@ export const schemaOperations = {
           endpointUrl: schemaData.endpointUrl,
           httpMethod: schemaData.httpMethod,
           lastRequestBody: schemaData.lastRequestBody,
+          resource: schemaData.resource,
+          resourceId: schemaData.resourceId,
           changeDescription: isTruncated
             ? (changeDescription || '') + ' (Note: Schema definition truncated for storage)'
             : changeDescription
@@ -1358,8 +1644,8 @@ export const apiHeaderOperations = {
   async getApplicableHeaders(projectId: number): Promise<ApiHeader[]> {
     try {
       const headers = await this.getAll();
-      return headers.filter(header => 
-        (header.scope === 'global') || 
+      return headers.filter(header =>
+          (header.scope === 'global') ||
         (header.scope === 'project' && header.projectId === projectId)
       );
     } catch (error) {

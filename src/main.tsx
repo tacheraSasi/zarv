@@ -1,8 +1,8 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import {StrictMode} from 'react'
+import {createRoot} from 'react-dom/client'
+import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom'
 import './index.css'
-import { AuthProvider, ProtectedRoute } from './contexts/AuthContext'
+import {AuthProvider, ProtectedRoute} from './contexts/AuthContext'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import ProjectsPage from './pages/ProjectsPage'
@@ -10,6 +10,7 @@ import ProjectDetailPage from './pages/ProjectDetailPage'
 import SchemaFormPage from './pages/SchemaFormPage'
 import SchemaDetailPage from './pages/SchemaDetailPage'
 import SchemaVersionsPage from './pages/SchemaVersionsPage'
+import ResourceDetailPage from './pages/ResourceDetailPage'
 import UserManagementPage from './pages/UserManagementPage'
 import UserProfilePage from './pages/UserProfilePage'
 
@@ -88,6 +89,14 @@ createRoot(document.getElementById('root')!).render(
               <ProtectedRoute>
                 <SchemaVersionsPage />
               </ProtectedRoute>
+            }
+          />
+            <Route
+                path="/projects/:projectId/resources/:resourceName"
+                element={
+                    <ProtectedRoute>
+                        <ResourceDetailPage/>
+                    </ProtectedRoute>
             }
           />
           <Route

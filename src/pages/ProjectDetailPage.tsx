@@ -1,15 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, {useEffect, useState} from 'react';
+import {Link, useNavigate, useParams} from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useAuth } from '../contexts/AuthContext';
-import { Project, Schema, ProjectUser, projectOperations, projectUserOperations, schemaOperations, userOperations } from '../utils/db';
-import { testSchemas, SchemaTestResult } from '../utils/schemaTestService';
+import {useAuth} from '../contexts/AuthContext';
+import {
+    Project,
+    projectOperations,
+    ProjectUser,
+    projectUserOperations,
+    resourceOperations,
+    Schema,
+    schemaOperations,
+    userOperations
+} from '../utils/db';
+import {SchemaTestResult, testSchemas} from '../utils/schemaTestService';
 import HeaderConfigModal from '../components/HeaderConfigModal';
+import ResourceModal from '../components/ResourceModal';
 
 const ProjectDetailPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [schemas, setSchemas] = useState<Schema[]>([]);
+    const [groupedSchemas, setGroupedSchemas] = useState<Record<string, Schema[]>>({});
+    const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -23,6 +35,8 @@ const ProjectDetailPage: React.FC = () => {
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [isUserOwner, setIsUserOwner] = useState(false);
   const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
+    const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'resources' | 'members'>('resources');
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -62,6 +76,28 @@ const ProjectDetailPage: React.FC = () => {
         // Load schemas for this project
         const projectSchemas = await schemaOperations.getByProjectId(parseInt(projectId));
         setSchemas(projectSchemas);
+
+          // Group schemas by resource
+          const grouped: Record<string, Schema[]> = {};
+
+          projectSchemas.forEach(schema => {
+              const resource = schema.resource || 'Uncategorized';
+              if (!grouped[resource]) {
+                  grouped[resource] = [];
+              }
+              grouped[resource].push(schema);
+          });
+
+          setGroupedSchemas(grouped);
+
+          // Load resources for this project
+          try {
+              const projectResources = await resourceOperations.getByProjectId(parseInt(projectId));
+              setResources(projectResources);
+          } catch (resourceErr) {
+              console.error('Error loading resources:', resourceErr);
+              // Don't fail the whole operation if resources can't be loaded
+          }
 
         // Load project users
         const projectUsersList = await projectUserOperations.getProjectUsers(parseInt(projectId));
@@ -235,8 +271,30 @@ const ProjectDetailPage: React.FC = () => {
 
     try {
       await schemaOperations.delete(schemaId);
+
+        // Find the schema to be deleted
+        const schemaToDelete = schemas.find(schema => schema.id === schemaId);
+
       // Remove the deleted schema from the state
-      setSchemas(schemas.filter(schema => schema.id !== schemaId));
+        const updatedSchemas = schemas.filter(schema => schema.id !== schemaId);
+        setSchemas(updatedSchemas);
+
+        // Update grouped schemas
+        if (schemaToDelete) {
+            const resource = schemaToDelete.resource || 'Uncategorized';
+            const updatedGrouped = {...groupedSchemas};
+
+            if (updatedGrouped[resource]) {
+                updatedGrouped[resource] = updatedGrouped[resource].filter(schema => schema.id !== schemaId);
+
+                // If this was the last schema in the resource, remove the resource
+                if (updatedGrouped[resource].length === 0) {
+                    delete updatedGrouped[resource];
+                }
+
+                setGroupedSchemas(updatedGrouped);
+            }
+        }
     } catch (err) {
       console.error('Error deleting schema:', err);
       setError('Failed to delete schema');
@@ -271,6 +329,7 @@ const ProjectDetailPage: React.FC = () => {
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString();
   };
+
 
   if (isLoading) {
     return (
@@ -415,286 +474,264 @@ const ProjectDetailPage: React.FC = () => {
           </div>
         )}
 
-        {/* Project Users Section */}
-        <div className="mb-8">
-          <div className="mb-6 flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Project Members
-            </h2>
-            {isUserOwner && (
-              <button
-                onClick={() => setIsAddingUser(!isAddingUser)}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                {isAddingUser ? 'Cancel' : 'Add User'}
-              </button>
-            )}
-          </div>
-
-          {isAddingUser && isUserOwner && (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-6">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Add User to Project</h3>
-              <div className="flex space-x-4">
-                <select
-                  value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : '')}
-                  className="flex-grow px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">Select a user</option>
-                  {availableUsers.map(user => (
-                    <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
-                  ))}
-                </select>
-                <button
-                  onClick={handleAddUser}
-                  disabled={selectedUserId === ''}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                >
-                  Add
-                </button>
+          {/* Tab Navigation */}
+          {project && (
+              <div className="mb-6">
+                  <div className="border-b border-gray-200 dark:border-gray-700">
+                      <nav className="-mb-px flex">
+                          <button
+                              onClick={() => setActiveTab('resources')}
+                              className={`py-4 px-6 font-medium text-sm border-b-2 ${
+                                  activeTab === 'resources'
+                                      ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                              }`}
+                          >
+                              Resources
+                          </button>
+                          <button
+                              onClick={() => setActiveTab('members')}
+                              className={`py-4 px-6 font-medium text-sm border-b-2 ${
+                                  activeTab === 'members'
+                                      ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                              }`}
+                          >
+                              Members
+                          </button>
+                      </nav>
+                  </div>
               </div>
-              {availableUsers.length === 0 && (
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  No more users available to add to this project.
-                </p>
-              )}
-            </div>
           )}
 
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Role
-                  </th>
-                  {isUserOwner && (
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {projectUsers.map((pu) => (
-                  <tr key={pu.projectUser.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {pu.user.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {pu.user.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        pu.projectUser.role === 'owner' 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                      }`}>
-                        {pu.projectUser.role === 'owner' ? 'Owner' : 'Member'}
-                      </span>
-                    </td>
-                    {isUserOwner && (
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {pu.projectUser.role !== 'owner' && (
+          {/* Tab Content */}
+          {activeTab === 'members' && (
+              <div className="mb-8">
+                  <div className="mb-6 flex justify-between items-center">
+                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                          Project Members
+                      </h2>
+                      {isUserOwner && (
                           <button
-                            onClick={() => handleRemoveUser(pu.user.id)}
-                            className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                              onClick={() => setIsAddingUser(!isAddingUser)}
+                              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                           >
-                            Remove
+                              {isAddingUser ? 'Cancel' : 'Add User'}
                           </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Schemas Section */}
-        <div className="mb-6 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Schemas
-          </h2>
-          <Link
-            to={`/projects/${projectId}/schemas/new`}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            Add Schema
-          </Link>
-        </div>
-
-        {schemas.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8 text-center">
-            <p className="text-gray-600 dark:text-gray-400 mb-4">This project doesn't have any schemas yet.</p>
-            <Link
-              to={`/projects/${projectId}/schemas/new`}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              Create Your First Schema
-            </Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {schemas.map((schema) => (
-              <div key={schema.id} className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-                <div className="p-6">
-                  <div className="flex items-center mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mr-2">
-                      {schema.name}
-                    </h3>
-                    {schema.httpMethod && (
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        schema.httpMethod === 'GET' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
-                        schema.httpMethod === 'POST' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                        schema.httpMethod === 'PUT' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                        schema.httpMethod === 'PATCH' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
-                        schema.httpMethod === 'DELETE' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                        'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                      }`}>
-                        {schema.httpMethod}
-                      </span>
-                    )}
-                  </div>
-                  {schema.description && (
-                    <p className="text-gray-600 dark:text-gray-400 mb-2">
-                      {schema.description}
-                    </p>
-                  )}
-                  {schema.endpointUrl && (
-                    <p className="text-sm text-gray-500 dark:text-gray-500 mb-2">
-                      Endpoint: {schema.endpointUrl}
-                    </p>
-                  )}
-                  <p className="text-sm text-gray-500 dark:text-gray-500">
-                    Last updated: {formatDate(schema.updatedAt)}
-                  </p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-700 px-6 py-3 flex justify-between">
-                  <Link
-                    to={`/projects/${projectId}/schemas/${schema.id}`}
-                    className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium"
-                  >
-                    View Details
-                  </Link>
-                  <button
-                    onClick={() => schema.id && handleDeleteSchema(schema.id)}
-                    className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-8 flex justify-center">
-          <button
-            onClick={handleBatchTest}
-            className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
-            disabled={schemas.length === 0 || isTestingSchemas}
-          >
-            {isTestingSchemas ? 'Testing Schemas...' : 'Run Tests for All Schemas'}
-          </button>
-        </div>
-
-        {batchTestResults && batchTestResults.length > 0 && (
-          <div className="mt-8 bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Batch Test Results
-            </h3>
-
-            <div className="mb-4">
-              <div className="flex items-center mb-2">
-                <div className="w-4 h-4 rounded-full bg-green-500 mr-2"></div>
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  {batchTestResults.filter(r => r.result.success).length} Passed
-                </span>
-                <div className="w-4 h-4 rounded-full bg-red-500 mx-4 mr-2"></div>
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  {batchTestResults.filter(r => !r.result.success).length} Failed
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {batchTestResults.map((result, index) => (
-                <div
-                  key={index}
-                  className={`p-4 rounded-md ${
-                    result.result.success 
-                      ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
-                      : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center">
-                      {result.result.success ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
                       )}
-                      <h4 className="font-semibold text-gray-900 dark:text-white">{result.schemaName}</h4>
-                    </div>
-                    {result.schemaId && (
-                      <Link
-                        to={`/projects/${projectId}/schemas/${result.schemaId}`}
-                        className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
-                      >
-                        View Schema
-                      </Link>
-                    )}
                   </div>
 
-                  <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                    {result.result.message}
-                  </p>
-
-                  {result.result.responseStatus && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Status: {result.result.responseStatus} {result.result.responseStatusText}
-                    </p>
+                  {isAddingUser && isUserOwner && (
+                      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-6">
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Add User to
+                              Project</h3>
+                          <div className="flex space-x-4">
+                              <select
+                                  value={selectedUserId}
+                                  onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : '')}
+                                  className="flex-grow px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                              >
+                                  <option value="">Select a user</option>
+                                  {availableUsers.map(user => (
+                                      <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                                  ))}
+                              </select>
+                              <button
+                                  onClick={handleAddUser}
+                                  disabled={selectedUserId === ''}
+                                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                              >
+                                  Add
+                              </button>
+                          </div>
+                          {availableUsers.length === 0 && (
+                              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                                  No more users available to add to this project.
+                              </p>
+                          )}
+                      </div>
                   )}
 
-                  {result.result.validationResult && !result.result.validationResult.isValid && result.result.validationResult.errors.length > 0 && (
-                    <details className="mt-2">
-                      <summary className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-                        Show Validation Errors ({result.result.validationResult.errors.length})
-                      </summary>
-                      <ul className="mt-2 list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                        {result.result.validationResult.errors.map((error, errorIndex) => (
-                          <li key={errorIndex}>
-                            <span className="font-medium">{error.path.length > 0 ? error.path.join('.') : 'root'}:</span> {error.message}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+                  <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                          <thead className="bg-gray-50 dark:bg-gray-700">
+                          <tr>
+                              <th scope="col"
+                                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  Name
+                              </th>
+                              <th scope="col"
+                                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  Email
+                              </th>
+                              <th scope="col"
+                                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  Role
+                              </th>
+                              {isUserOwner && (
+                                  <th scope="col"
+                                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                      Actions
+                                  </th>
+                              )}
+                          </tr>
+                          </thead>
+                          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                          {projectUsers.map((pu) => (
+                              <tr key={pu.projectUser.id}>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                                      {pu.user.name}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                      {pu.user.email}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            pu.projectUser.role === 'owner'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                        }`}>
+                          {pu.projectUser.role === 'owner' ? 'Owner' : 'Member'}
+                        </span>
+                                  </td>
+                                  {isUserOwner && (
+                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                          {pu.projectUser.role !== 'owner' && (
+                                              <button
+                                                  onClick={() => handleRemoveUser(pu.user.id)}
+                                                  className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                                              >
+                                                  Remove
+                                              </button>
+                                          )}
+                                      </td>
+                                  )}
+                              </tr>
+                          ))}
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+          )}
+
+          {activeTab === 'resources' && (
+              <>
+                  {/* Resources Section */}
+                  <div className="mb-6 flex justify-between items-center">
+                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                          Resources
+                      </h2>
+                      <div className="flex space-x-2">
+                          <button
+                              onClick={() => setIsResourceModalOpen(true)}
+                              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                          >
+                              Add Resource
+                          </button>
+                      </div>
+                  </div>
+
+                  {/* Resources Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
+                      {resources.map((resource) => (
+                          <Link
+                              key={resource.id}
+                              to={`/projects/${projectId}/resources/${encodeURIComponent(resource.name)}`}
+                              className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-200"
+                          >
+                              <div className="p-6">
+                                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                                      {resource.name}
+                    </h3>
+                                  <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {groupedSchemas[resource.name] ? groupedSchemas[resource.name].length : 0} {groupedSchemas[resource.name] && groupedSchemas[resource.name].length === 1 ? 'schema' : 'schemas'}
+                      </span>
+                                      <svg xmlns="http://www.w3.org/2000/svg"
+                                           className="h-5 w-5 text-indigo-600 dark:text-indigo-400" fill="none"
+                                           viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                d="M9 5l7 7-7 7"/>
+                                      </svg>
+                                  </div>
+                              </div>
+                          </Link>
+                      ))}
+
+                      {/* Add Uncategorized if there are any */}
+                      {groupedSchemas['Uncategorized'] && groupedSchemas['Uncategorized'].length > 0 && (
+                          <Link
+                              key="Uncategorized"
+                              to={`/projects/${projectId}/resources/Uncategorized`}
+                              className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-200"
+                          >
+                              <div className="p-6">
+                                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                                      Uncategorized
+                                  </h3>
+                                  <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {groupedSchemas['Uncategorized'].length} {groupedSchemas['Uncategorized'].length === 1 ? 'schema' : 'schemas'}
+                      </span>
+                                      <svg xmlns="http://www.w3.org/2000/svg"
+                                           className="h-5 w-5 text-indigo-600 dark:text-indigo-400" fill="none"
+                                           viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                d="M9 5l7 7-7 7"/>
+                                      </svg>
+                                  </div>
+                              </div>
+                          </Link>
+                      )}
+                  </div>
+
+              </>
         )}
+
       </div>
 
       {/* Header Configuration Modal */}
-      <HeaderConfigModal 
-        isOpen={isHeaderModalOpen} 
-        onClose={() => setIsHeaderModalOpen(false)} 
+        <HeaderConfigModal
+            isOpen={isHeaderModalOpen}
+            onClose={() => setIsHeaderModalOpen(false)}
         projectId={project?.id ? parseInt(project.id.toString()) : undefined}
       />
+
+        {/* Resource Creation Modal */}
+        <ResourceModal
+            isOpen={isResourceModalOpen}
+            onClose={() => setIsResourceModalOpen(false)}
+            projectId={project?.id ? parseInt(project.id.toString()) : 0}
+            existingResources={resources.map(r => r.name)}
+            onSuccess={async (resourceId, resourceName) => {
+                // Refresh the resources list
+                if (project?.id) {
+                    try {
+                        // Fetch the updated list of resources
+                        const projectResources = await resourceOperations.getByProjectId(parseInt(projectId!));
+                        setResources(projectResources);
+
+                        // Also refresh schemas to keep everything in sync
+                        const projectSchemas = await schemaOperations.getByProjectId(parseInt(projectId!));
+                        setSchemas(projectSchemas);
+
+                        // Update grouped schemas
+                        const grouped: Record<string, Schema[]> = {};
+                        projectSchemas.forEach(schema => {
+                            const resource = schema.resource || 'Uncategorized';
+                            if (!grouped[resource]) {
+                                grouped[resource] = [];
+                            }
+                            grouped[resource].push(schema);
+                        });
+
+                        setGroupedSchemas(grouped);
+                    } catch (err) {
+                        console.error('Error refreshing data after resource creation:', err);
+                    }
+                }
+            }}
+        />
     </Layout>
   );
 };
