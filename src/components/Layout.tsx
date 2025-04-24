@@ -13,7 +13,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
           <header
-              className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-10 backdrop-blur-sm bg-white/90 dark:bg-gray-800/90">
+              className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-50 backdrop-blur-sm bg-white/90 dark:bg-gray-800/90">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">

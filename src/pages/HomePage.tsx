@@ -65,8 +65,8 @@ const HomePage: React.FC = () => {
         </div>
 
         {/* Features Section */}
-        <div className="mb-20">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-12 inline-block border-b-4 border-indigo-500 pb-2">
+        <div className="mb-20 flex flex-col items-center">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-12 inline-block border-b-4 border-indigo-500 pb-2 text-center">
             Powerful Features
           </h2>
 
@@ -129,8 +129,8 @@ const HomePage: React.FC = () => {
         </div>
 
         {/* New Features Section */}
-        <div className="mb-20">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-12 inline-block border-b-4 border-indigo-500 pb-2">
+        <div className="mb-20 flex flex-col items-center">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-12 inline-block border-b-4 border-indigo-500 pb-2 text-center">
             New Features
           </h2>
 
@@ -277,7 +277,7 @@ const HomePage: React.FC = () => {
         {/* Call to Action */}
         <div className="mb-12 bg-indigo-600 rounded-xl p-10 shadow-xl relative overflow-hidden">
           <div className="absolute inset-0 bg-grid-white/[0.05] bg-[length:20px_20px]"></div>
-          <div className="relative z-10">
+          <div className="relative z-10 flex flex-col items-center text-center">
             <h2 className="text-3xl font-bold text-white mb-4">
               Ready to streamline your API validation?
             </h2>
